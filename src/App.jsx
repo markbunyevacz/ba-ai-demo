@@ -492,6 +492,13 @@ function App() {
                       console.error('Error generating BPMN from updated workflow:', generateError)
                       setWorkflowError(`BPMN generálás hiba: ${generateError.message}`)
                     }
+
+                    diagramClient.generateFromTickets(tickets, {
+                      type: 'bpmn',
+                      formats: ['svg', 'xml', 'png']
+                    }).then(setDiagram).catch(err => {
+                      console.warn('Diagram regeneration failed:', err)
+                    })
                   }}
                 />
                 <div className="min-h-[640px]">

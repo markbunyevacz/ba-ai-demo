@@ -48,6 +48,14 @@ const DiagramViewer = ({ diagram, onRefresh }) => {
     }
   }
 
+  if (!currentDiagram) {
+    return (
+      <div className="p-6 text-sm text-slate-500 bg-slate-50 border border-dashed border-slate-200 rounded-lg">
+        Nincs megjeleníthető diagram.
+      </div>
+    )
+  }
+
   return (
     <div className="bg-white border border-slate-200 rounded-lg shadow-sm">
       <div className="flex justify-between items-center px-4 py-3 border-b border-slate-200">
