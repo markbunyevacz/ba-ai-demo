@@ -4,6 +4,9 @@ import ProgressBar from './components/ProgressBar'
 import SuccessModal from './components/SuccessModal'
 import GroundingDashboard from './components/GroundingDashboard'
 import StakeholderDashboard from './components/StakeholderDashboard'
+import BPMNViewer from './components/BPMNViewer'
+import FlowchartGenerator from './components/FlowchartGenerator'
+import bpmnService from './services/bpmnService'
 import stakeholderService from './services/stakeholderService'
 import groundingService from './services/groundingService'
 
@@ -23,6 +26,9 @@ function App() {
   const [stakeholderNetwork, setStakeholderNetwork] = useState(null)
   const [stakeholderRecommendations, setStakeholderRecommendations] = useState([])
   const [stakeholderValidation, setStakeholderValidation] = useState(null)
+  const [workflow, setWorkflow] = useState(null)
+  const [bpmnXml, setBpmnXml] = useState('')
+  const [workflowError, setWorkflowError] = useState('')
   
   // New state for Jira OAuth
   const [jiraSessionId, setJiraSessionId] = useState(null)
@@ -129,6 +135,9 @@ function App() {
       setStakeholderNetwork(null)
       setStakeholderRecommendations([])
       setStakeholderValidation(null)
+      setWorkflow(null)
+      setBpmnXml('')
+      setWorkflowError('')
       setError('')
     } else {
       setError('Kérjük, válasszon Excel (.xlsx) vagy Word (.docx) fájlt')
@@ -163,6 +172,17 @@ function App() {
       // Wait for ProgressBar animation to complete (3 seconds)
       setTimeout(() => {
         setTickets(data.tickets)
+
+        try {
+          const workflowAnalysis = bpmnService.analyzeWorkflow(data.tickets)
+          const generatedXml = bpmnService.generateBPMNXML(workflowAnalysis)
+          setWorkflow(workflowAnalysis)
+          setBpmnXml(generatedXml)
+          setWorkflowError('')
+        } catch (workflowErr) {
+          console.error('Workflow generation error:', workflowErr)
+          setWorkflowError(`Nem sikerült a workflow létrehozása: ${workflowErr.message}`)
+        }
         
         // === NEW: Perform stakeholder analysis ===
         try {
@@ -407,6 +427,41 @@ function App() {
                 network={stakeholderNetwork}
                 validation={stakeholderValidation}
               />
+            </div>
+          )}
+
+          {/* Workflow Visualization */}
+          {showSuccess && tickets.length > 0 && workflow && (
+            <div className="mt-8 space-y-6">
+              <h3 className="text-xl font-semibold text-[#003366]">Folyamat vizualizáció</h3>
+              {workflowError && (
+                <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg">
+                  <p className="text-sm text-red-700">{workflowError}</p>
+                </div>
+              )}
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <FlowchartGenerator
+                  tickets={tickets}
+                  onWorkflowGenerated={(updatedWorkflow) => {
+                    setWorkflow(updatedWorkflow)
+                    try {
+                      const updatedXml = bpmnService.generateBPMNXML(updatedWorkflow)
+                      setBpmnXml(updatedXml)
+                    } catch (generateError) {
+                      console.error('Error generating BPMN from updated workflow:', generateError)
+                      setWorkflowError(`BPMN generálás hiba: ${generateError.message}`)
+                    }
+                  }}
+                />
+                <div className="min-h-[640px]">
+                  <BPMNViewer
+                    xml={bpmnXml}
+                    allowEditing
+                    onExport={(xmlContent) => setBpmnXml(xmlContent)}
+                    onError={(errMsg) => setWorkflowError(errMsg)}
+                  />
+                </div>
+              </div>
             </div>
           )}
 
