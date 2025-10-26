@@ -5,6 +5,49 @@
 class SessionStore {
   constructor() {
     this.sessions = new Map()
+    this.cryptoKey = null
+  }
+
+  /**
+   * Initialize encryption utilities
+   * @param {Object} options
+   */
+  async initialize(options = {}) {
+    if (this.cryptoKey) return
+
+    const {
+      secret = process.env.SESSION_ENCRYPTION_SECRET,
+      iterations = 100000,
+      salt = process.env.SESSION_ENCRYPTION_SALT || 'session-store-default-salt'
+    } = options
+
+    if (!secret) {
+      console.warn('SessionStore: No encryption secret configured, falling back to in-memory storage without encryption')
+      return
+    }
+
+    // Derive key using PBKDF2 via Web Crypto (SubtleCrypto)
+    const encoder = new TextEncoder()
+    const keyMaterial = await globalThis.crypto.subtle.importKey(
+      'raw',
+      encoder.encode(secret),
+      { name: 'PBKDF2' },
+      false,
+      ['deriveKey']
+    )
+
+    this.cryptoKey = await globalThis.crypto.subtle.deriveKey(
+      {
+        name: 'PBKDF2',
+        salt: encoder.encode(salt),
+        iterations,
+        hash: 'SHA-256'
+      },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    )
   }
 
   /**
@@ -19,6 +62,7 @@ class SessionStore {
       lastAccessed: Date.now(),
       ...sessionData
     }
+
     this.sessions.set(sessionId, session)
     return sessionId
   }

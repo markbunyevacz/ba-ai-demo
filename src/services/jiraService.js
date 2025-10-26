@@ -1,4 +1,6 @@
 import axios from 'axios'
+import rateLimit from 'axios-rate-limit'
+import monitoringService from './monitoringServiceInstance.js'
 
 class JiraService {
   constructor() {
@@ -15,6 +17,19 @@ class JiraService {
     this.authorizationURL = 'https://auth.atlassian.com/authorize'
     this.tokenURL = 'https://auth.atlassian.com/oauth/token'
     this.apiBaseURL = `${this.baseURL}/rest/api/3`
+
+    const maxRequestsPerInterval = parseInt(process.env.JIRA_RATE_LIMIT || '45', 10)
+    const intervalMs = parseInt(process.env.JIRA_RATE_LIMIT_INTERVAL_MS || '60000', 10)
+
+    this.http = rateLimit(axios.create(), {
+      maxRequests: maxRequestsPerInterval,
+      perMilliseconds: intervalMs,
+      maxRPS: parseFloat(process.env.JIRA_RATE_LIMIT_RPS || '4.5')
+    })
+
+    if (process.env.JIRA_HTTP_TIMEOUT_MS) {
+      this.http.defaults.timeout = parseInt(process.env.JIRA_HTTP_TIMEOUT_MS, 10)
+    }
   }
 
   /**
@@ -162,11 +177,31 @@ class JiraService {
 
       const executeRequest = async (attempt = 1) => {
         try {
-          const response = await axios(config)
+          const start = Date.now()
+          const response = await this.http(config)
+
+          this.monitoringService.trackJiraApiCall({
+            endpoint,
+            method,
+            status: response.status,
+            success: true,
+            duration: Date.now() - start
+          })
+
           return response.data
         } catch (error) {
           const status = error.response?.status
           const shouldRetry = retry && attempt < maxAttempts && retryStatusCodes.includes(status)
+
+          this.monitoringService.trackJiraApiCall({
+            endpoint,
+            method,
+            status,
+            success: false,
+            duration: error.config?.metadata?.duration || null,
+            error: error.response?.data || error.message,
+            rateLimited: status === 429
+          })
 
           if (shouldRetry) {
             const delay = retryDelay * Math.pow(2, attempt - 1)

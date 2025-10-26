@@ -498,7 +498,7 @@ function App() {
                   {diagram ? (
                     <DiagramViewer
                       diagram={diagram}
-                      onRefresh={(updated) => setDiagram(updated)}
+                      onRefresh={setDiagram}
                     />
                   ) : (
                     <BPMNViewer
