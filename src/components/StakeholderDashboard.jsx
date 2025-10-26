@@ -4,6 +4,7 @@ import StakeholderMatrix from './StakeholderMatrix'
 const StakeholderDashboard = ({ stakeholders, matrix, recommendations, network, validation }) => {
   const [activeTab, setActiveTab] = useState('overview')
   const [sortBy, setSortBy] = useState('frequency')
+  const [showCommunicationPlan, setShowCommunicationPlan] = useState(null)
 
   if (!stakeholders || stakeholders.length === 0) {
     return (
@@ -80,7 +81,7 @@ const StakeholderDashboard = ({ stakeholders, matrix, recommendations, network, 
       </div>
 
       {/* Validation Alerts */}
-      {(hasIssues || hasWarnings || hasHallucinations) && (
+      {(hasIssues || hasWarnings || hasHallucinations || validation?.assignmentValidation) && (
         <div className="space-y-3">
           {hasIssues && (
             <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg">
@@ -104,13 +105,25 @@ const StakeholderDashboard = ({ stakeholders, matrix, recommendations, network, 
               </ul>
             </div>
           )}
+          {validation?.assignmentValidation && (
+            <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
+              <h3 className="font-bold text-blue-800 mb-2">✅ Assignment Validation</h3>
+              <p className="text-sm text-blue-700">Tickets checked: {validation.assignmentValidation.assignmentsChecked.length}</p>
+              {validation.assignmentValidation.errors.length > 0 && (
+                <p className="text-sm text-red-700 mt-2">Errors: {validation.assignmentValidation.errors.length}</p>
+              )}
+              {validation.assignmentValidation.warnings.length > 0 && (
+                <p className="text-sm text-yellow-700">Warnings: {validation.assignmentValidation.warnings.length}</p>
+              )}
+            </div>
+          )}
         </div>
       )}
 
       {/* Tabs */}
       <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-        <div className="border-b border-gray-200 flex">
-          {['overview', 'matrix', 'topstakeholders', 'recommendations'].map(tab => (
+        <div className="border-b border-gray-200 flex flex-wrap">
+          {['overview', 'matrix', 'topstakeholders', 'recommendations', 'communication'].map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -248,6 +261,16 @@ const StakeholderDashboard = ({ stakeholders, matrix, recommendations, network, 
                         </p>
                       </div>
                     </div>
+                    {stakeholder.communicationPlan && (
+                      <div className="mt-4">
+                        <button
+                          onClick={() => setShowCommunicationPlan(stakeholder.communicationPlan)}
+                          className="text-sm text-blue-600 hover:text-blue-800 underline"
+                        >
+                          View communication plan
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -307,8 +330,200 @@ const StakeholderDashboard = ({ stakeholders, matrix, recommendations, network, 
               )}
             </div>
           )}
+
+          {activeTab === 'communication' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-bold text-gray-800">Communication Plans</h2>
+                <p className="text-sm text-gray-500">Strategic engagement plans per stakeholder</p>
+              </div>
+
+              {validation?.communicationPlans && validation.communicationPlans.length > 0 ? (
+                <div className="grid gap-4">
+                  {validation.communicationPlans.map((plan, idx) => (
+                    <div key={idx} className="border rounded-lg shadow-sm overflow-hidden" style={{ borderColor: plan.color }}>
+                      <div className="p-4" style={{ backgroundColor: `${plan.color}10` }}>
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h3 className="text-xl font-bold text-gray-800">{plan.stakeholderName}</h3>
+                            <p className="text-sm text-gray-600 capitalize">Quadrant: {plan.quadrant.replace('-', ' ')}</p>
+                          </div>
+                          <span className="px-3 py-1 bg-white rounded-full text-xs font-semibold" style={{ border: `1px solid ${plan.color}`, color: plan.color }}>
+                            {plan.cadence}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-700 mt-3">Objective: {plan.objective}</p>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                          <div>
+                            <h4 className="font-semibold text-gray-800 mb-1">Channels</h4>
+                            <ul className="text-sm text-gray-700 space-y-1">
+                              {plan.channels.map((channel, cidx) => (
+                                <li key={cidx}>• {channel}</li>
+                              ))}
+                            </ul>
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-gray-800 mb-1">Owner</h4>
+                            <p className="text-sm text-gray-700">{plan.owner}</p>
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-gray-800 mb-1">Success Metrics</h4>
+                            <p className="text-sm text-gray-700">Target touchpoints: {plan.successMetrics.targetTouchpoints}</p>
+                            <p className="text-sm text-gray-700">Current touchpoints: {plan.successMetrics.currentTouchpoints}</p>
+                            <p className="text-sm text-gray-700">Activity score: {plan.successMetrics.activityScore}</p>
+                          </div>
+                        </div>
+
+                        {plan.keyMessages && plan.keyMessages.length > 0 && (
+                          <div className="mt-4">
+                            <h4 className="font-semibold text-gray-800 mb-2">Key Messages</h4>
+                            <ul className="text-sm text-gray-700 space-y-1">
+                              {plan.keyMessages.map((message, midx) => (
+                                <li key={midx}>✓ {message}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500">No communication plans generated.</p>
+              )}
+
+              {validation?.assignmentValidation && validation.assignmentValidation.assignmentsChecked.length > 0 && (
+                <div>
+                  <h3 className="text-xl font-bold text-gray-800 mb-3">Assignment Review</h3>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ticket</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assignee</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Issues</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {validation.assignmentValidation.assignmentsChecked.map((assignment, idx) => (
+                          <tr key={idx}>
+                            <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-700">{assignment.ticketId}</td>
+                            <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-700">{assignment.assignee}</td>
+                            <td className="px-4 py-2 whitespace-nowrap text-sm font-semibold">
+                              <span
+                                className={`px-2 py-1 rounded-full text-xs ${
+                                  assignment.status === 'error'
+                                    ? 'bg-red-100 text-red-700'
+                                    : assignment.status === 'warning'
+                                    ? 'bg-yellow-100 text-yellow-700'
+                                    : 'bg-green-100 text-green-700'
+                                }`}
+                              >
+                                {assignment.status}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2 text-sm text-gray-600">
+                              {assignment.issues.length > 0 ? assignment.issues.join('; ') : 'No issues'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
+    </div>
+      {showCommunicationPlan && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-2xl max-w-3xl w-full">
+            <div className="flex items-center justify-between border-b px-6 py-4">
+              <div>
+                <h3 className="text-2xl font-bold text-gray-800">Communication Plan</h3>
+                <p className="text-sm text-gray-500">{showCommunicationPlan.stakeholderName}</p>
+              </div>
+              <button
+                onClick={() => setShowCommunicationPlan(null)}
+                className="text-gray-500 hover:text-gray-700"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="px-6 py-4 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <h4 className="font-semibold text-gray-800">Quadrant</h4>
+                  <p className="text-sm text-gray-700 capitalize">{showCommunicationPlan.quadrant.replace('-', ' ')}</p>
+                </div>
+                <div>
+                  <h4 className="font-semibold text-gray-800">Cadence</h4>
+                  <p className="text-sm text-gray-700">{showCommunicationPlan.cadence}</p>
+                </div>
+                <div>
+                  <h4 className="font-semibold text-gray-800">Owner</h4>
+                  <p className="text-sm text-gray-700">{showCommunicationPlan.owner}</p>
+                </div>
+                <div>
+                  <h4 className="font-semibold text-gray-800">Objective</h4>
+                  <p className="text-sm text-gray-700">{showCommunicationPlan.objective}</p>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-gray-800 mb-2">Channels</h4>
+                <ul className="text-sm text-gray-700 space-y-1">
+                  {showCommunicationPlan.channels.map((channel, idx) => (
+                    <li key={idx}>• {channel}</li>
+                  ))}
+                </ul>
+              </div>
+
+              {showCommunicationPlan.keyMessages.length > 0 && (
+                <div>
+                  <h4 className="font-semibold text-gray-800 mb-2">Key Messages</h4>
+                  <ul className="text-sm text-gray-700 space-y-1">
+                    {showCommunicationPlan.keyMessages.map((message, idx) => (
+                      <li key={idx}>✓ {message}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div>
+                <h4 className="font-semibold text-gray-800 mb-2">Success Metrics</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-xs text-gray-500 uppercase">Target Touchpoints</p>
+                    <p className="text-lg font-bold text-gray-800">{showCommunicationPlan.successMetrics.targetTouchpoints}</p>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-xs text-gray-500 uppercase">Current Touchpoints</p>
+                    <p className="text-lg font-bold text-gray-800">{showCommunicationPlan.successMetrics.currentTouchpoints}</p>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-xs text-gray-500 uppercase">Activity Score</p>
+                    <p className="text-lg font-bold text-gray-800">{showCommunicationPlan.successMetrics.activityScore}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="border-t px-6 py-4 flex justify-end">
+              <button
+                onClick={() => setShowCommunicationPlan(null)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

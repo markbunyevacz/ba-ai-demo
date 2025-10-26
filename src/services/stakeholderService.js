@@ -1,191 +1,369 @@
-/**
- * Stakeholder Identification & Analysis Service
- * Performs NLP-based extraction, categorization, and power/interest analysis
- */
+import { DOMAIN_KNOWLEDGE, BUSINESS_RULES } from '../config/knowledgeBase'
+
+const POWER_SCORES = { Low: 1, Medium: 2, High: 3 }
 
 class StakeholderService {
   constructor() {
+    const stakeholderConfig = DOMAIN_KNOWLEDGE?.STAKEHOLDER_ANALYSIS || {}
+    const baContext = DOMAIN_KNOWLEDGE?.BA_CONTEXT || {}
+
+    this.extractionPatterns = stakeholderConfig.extractionPatterns || []
+    this.roleMapping = stakeholderConfig.roleMapping || {}
+    this.quadrantStrategies = stakeholderConfig.quadrantStrategies || {}
+    this.powerKeywords = stakeholderConfig.powerKeywords || {}
+    this.interestKeywords = stakeholderConfig.interestKeywords || {}
+    this.hallucinationRules = stakeholderConfig.halluccinationDetection || {}
+    this.networkSettings = stakeholderConfig.networkAnalysis || {}
+
+    this.stakeholderTypes = new Set(baContext.stakeholders || [])
+    this.assigneeRules = BUSINESS_RULES?.ASSIGNEE_RULES || {}
     this.stakeholders = new Map()
-    
-    // Stakeholder type definitions
-    this.STAKEHOLDER_TYPES = {
-      'Product Owner': { power: 'High', interest: 'High', color: '#d4185d' },
-      'Business Analyst': { power: 'High', interest: 'High', color: '#d4185d' },
-      'Project Manager': { power: 'High', interest: 'High', color: '#d4185d' },
-      'Developer': { power: 'Medium', interest: 'High', color: '#0066cc' },
-      'QA Engineer': { power: 'Medium', interest: 'High', color: '#0066cc' },
-      'Tester': { power: 'Medium', interest: 'High', color: '#0066cc' },
-      'End User': { power: 'Low', interest: 'High', color: '#009900' },
-      'Customer': { power: 'Medium', interest: 'High', color: '#0066cc' },
-      'Stakeholder': { power: 'Medium', interest: 'Medium', color: '#ff9900' },
-      'Manager': { power: 'High', interest: 'Medium', color: '#ff6600' },
-      'Executive': { power: 'High', interest: 'Medium', color: '#ff6600' },
-      'Sponsor': { power: 'High', interest: 'High', color: '#d4185d' }
-    }
-
-    // Extraction patterns
-    this.EXTRACTION_PATTERNS = [
-      /assigned to[:\s]+([A-Za-z\s]+?)(?:[,.]|$)/gi,
-      /assignee[:\s]+([A-Za-z\s]+?)(?:[,.]|$)/gi,
-      /stakeholder[s]?[:\s]+([A-Za-z\s,&]+?)(?:[,.]|$)/gi,
-      /contact[:\s]+([A-Za-z\s]+?)(?:[,.]|$)/gi,
-      /mentioned by[:\s]+([A-Za-z\s]+?)(?:[,.]|$)/gi,
-      /owner[:\s]+([A-Za-z\s]+?)(?:[,.]|$)/gi,
-      /lead[:\s]+([A-Za-z\s]+?)(?:[,.]|$)/gi,
-      /manager[:\s]+([A-Za-z\s]+?)(?:[,.]|$)/gi,
-      /reporter[:\s]+([A-Za-z\s]+?)(?:[,.]|$)/gi,
-      /involving[:\s]+([A-Za-z\s,&]+?)(?:[,.]|$)/gi,
-      /team[:\s]+([A-Za-z\s,&]+?)(?:[,.]|$)/gi,
-      /department[:\s]+([A-Za-z\s,&]+?)(?:[,.]|$)/gi
-    ]
-
-    // Interest keywords
-    this.INTEREST_KEYWORDS = {
-      high: ['critical', 'important', 'urgent', 'required', 'must', 'essential', 'dependent', 'directly', 'directly involved'],
-      medium: ['involved', 'contribute', 'support', 'helps', 'related', 'relevant'],
-      low: ['inform', 'notify', 'aware', 'optional', 'nice to have', 'future']
-    }
-
-    // Power keywords
-    this.POWER_KEYWORDS = {
-      high: ['decides', 'approves', 'authorizes', 'budget', 'executive', 'sponsor', 'owner', 'lead', 'manager'],
-      medium: ['implements', 'develops', 'designs', 'reviews', 'team lead', 'senior'],
-      low: ['executes', 'supports', 'assists', 'junior', 'intern']
-    }
   }
 
-  /**
-   * Identify stakeholders from tickets
-   */
-  identifyStakeholders(tickets) {
-    const stakeholders = new Map()
+  identifyStakeholders(tickets = []) {
+    const profiles = new Map()
 
     tickets.forEach((ticket, index) => {
-      const text = `${ticket.summary || ''} ${ticket.description || ''} ${ticket.assignee || ''}`
-      
-      // Extract stakeholder mentions
-      this.EXTRACTION_PATTERNS.forEach(pattern => {
-        let match
-        while ((match = pattern.exec(text)) !== null) {
-          if (match[1]) {
-            const names = match[1]
-              .split(/[,&\s]+/)
-              .map(n => n.trim())
-              .filter(n => n.length > 2 && n.length < 50)
+      const context = this.buildTicketContext(ticket)
+      const extractedNames = this.extractNamesFromText(context)
 
-            names.forEach(name => {
-              if (name && name.length > 2) {
-                const normalized = this.normalizeName(name)
-                
-                if (!stakeholders.has(normalized)) {
-                  stakeholders.set(normalized, {
-                    name: this.formatName(name),
-                    originalName: name,
-                    mentions: [],
-                    type: this.inferType(name),
-                    power: 'Medium',
-                    interest: 'Medium',
-                    frequency: 0,
-                    confidence: 0
-                  })
-                }
+      extractedNames.forEach(name => {
+        const normalized = this.normalizeName(name)
+        const profile = this.getOrCreateProfile(profiles, normalized, name, {
+          context,
+          role: this.inferRole(name, context)
+        })
 
-                const stakeholder = stakeholders.get(normalized)
-                stakeholder.mentions.push({
-                  ticketId: ticket.id,
-                  context: text.substring(Math.max(0, match.index - 50), match.index + 100),
-                  source: 'extraction'
-                })
-                stakeholder.frequency += 1
-              }
-            })
-          }
-        }
+        profile.mentions.push({
+          ticketId: ticket.id,
+          index,
+          source: 'extraction',
+          context: context,
+          snippet: this.getSnippet(context, name)
+        })
+
+        profile.frequency = profile.mentions.length
+        this.updateEngagementMetrics(profile, { type: 'mention' })
       })
 
-      // Add assignee if present
       if (ticket.assignee && ticket.assignee !== 'Unassigned') {
         const normalized = this.normalizeName(ticket.assignee)
-        
-        if (!stakeholders.has(normalized)) {
-          stakeholders.set(normalized, {
-            name: this.formatName(ticket.assignee),
-            originalName: ticket.assignee,
-            mentions: [],
-            type: 'Developer',
-            power: 'Medium',
-            interest: 'High',
-            frequency: 0,
-            confidence: 0.95
-          })
-        }
-
-        const stakeholder = stakeholders.get(normalized)
-        stakeholder.mentions.push({
-          ticketId: ticket.id,
-          context: 'Assigned to this ticket',
-          source: 'assignee'
+        const profile = this.getOrCreateProfile(profiles, normalized, ticket.assignee, {
+          role: ticket.assigneeRole || this.inferRole(ticket.assignee, context)
         })
-        stakeholder.frequency += 1
+
+        profile.assignments.push({
+          ticketId: ticket.id,
+          summary: ticket.summary || '',
+          status: ticket.status || 'Unknown',
+          team: ticket.assigneeTeam || null,
+          role: ticket.assigneeRole || profile.type
+        })
+
+        profile.frequency = profile.mentions.length + profile.assignments.length
+        this.updateEngagementMetrics(profile, { type: 'assignment' })
       }
     })
 
-    // Categorize each stakeholder
-    stakeholders.forEach((stakeholder, key) => {
-      this.categorizeStakeholder(stakeholder)
-      // Calculate confidence based on mentions and patterns
-      stakeholder.confidence = Math.min(0.95, 0.5 + (stakeholder.frequency * 0.1))
+    const enrichedProfiles = Array.from(profiles.values()).map(profile => {
+      const combinedContext = profile.mentions.map(m => m.context).join(' ')
+
+      profile.power = this.determinePowerLevel(profile, combinedContext)
+      profile.interest = this.determineInterestLevel(profile, combinedContext)
+      profile.quadrant = this.getQuadrant(profile.power, profile.interest)
+      profile.color = this.getQuadrantColor(profile.power, profile.interest)
+      profile.engagementMetrics.activityScore = this.calculateActivityScore(profile)
+      profile.influenceScore = this.calculateInfluenceScore(profile)
+      profile.confidence = this.calculateConfidence(profile)
+      profile.communicationPlan = this.buildCommunicationPlan(profile)
+      profile.originalNames = Array.from(new Set(profile.originalNames))
+      profile.roles = Array.from(new Set(profile.roles))
+      profile.type = profile.roles[0] || profile.type
+
+      return profile
     })
 
-    this.stakeholders = stakeholders
-    return Array.from(stakeholders.values())
+    this.stakeholders = new Map(enrichedProfiles.map(profile => [profile.id, profile]))
+    return enrichedProfiles
   }
 
-  /**
-   * Categorize stakeholder by power and interest levels
-   */
-  categorizeStakeholder(stakeholder) {
-    let power = 'Medium'
-    let interest = 'Medium'
+  buildTicketContext(ticket = {}) {
+    const parts = [
+      ticket.summary,
+      ticket.description,
+      Array.isArray(ticket.acceptanceCriteria) ? ticket.acceptanceCriteria.join(' ') : '',
+      Array.isArray(ticket.comments) ? ticket.comments.join(' ') : '',
+      ticket.assignee ? `Assignee: ${ticket.assignee}` : ''
+    ]
 
-    // Determine power level
-    if (this.STAKEHOLDER_TYPES[stakeholder.type]) {
-      power = this.STAKEHOLDER_TYPES[stakeholder.type].power
-    } else {
-      const name = (stakeholder.name || '').toLowerCase()
-      const text = stakeholder.mentions.map(m => m.context || '').join(' ').toLowerCase()
-      
-      if (this.POWER_KEYWORDS.high.some(kw => name.includes(kw) || text.includes(kw))) {
-        power = 'High'
-      } else if (this.POWER_KEYWORDS.low.some(kw => name.includes(kw) || text.includes(kw))) {
-        power = 'Low'
+    return parts.filter(Boolean).join(' ')
+  }
+
+  extractNamesFromText(text = '') {
+    const candidates = new Set()
+
+    if (!text || this.extractionPatterns.length === 0) {
+      return []
+    }
+
+    this.extractionPatterns.forEach(pattern => {
+      if (!(pattern instanceof RegExp)) return
+      pattern.lastIndex = 0
+      let match
+
+      while ((match = pattern.exec(text)) !== null) {
+        if (!match[1]) continue
+        const matches = this.splitCandidateNames(match[1])
+        matches.forEach(candidate => {
+          if (this.isLikelyPersonName(candidate)) {
+            candidates.add(candidate)
+          }
+        })
+      }
+    })
+
+    return Array.from(candidates)
+  }
+
+  splitCandidateNames(raw = '') {
+    return raw
+      .split(/(?:,|&|\band\b|\+|\/)+/i)
+      .map(name => name.trim())
+      .filter(name => name.length > 0)
+  }
+
+  isLikelyPersonName(name = '') {
+    const trimmed = name.trim()
+    if (!trimmed) return false
+
+    const { minNameLength, maxNameLength, genericNames, suspiciousPatterns } = this.hallucinationRules
+
+    if (minNameLength && trimmed.length < minNameLength) return false
+    if (maxNameLength && trimmed.length > maxNameLength) return false
+    if (genericNames && genericNames.some(g => g.toLowerCase() === trimmed.toLowerCase())) return false
+
+    if (Array.isArray(suspiciousPatterns) && suspiciousPatterns.length > 0) {
+      const isSuspicious = suspiciousPatterns.some(pattern => {
+        try {
+          const regex = new RegExp(pattern, 'i')
+          return regex.test(trimmed)
+        } catch (error) {
+          return false
+        }
+      })
+      if (isSuspicious) return false
+    }
+
+    return true
+  }
+
+  getOrCreateProfile(store, normalized, name, metadata = {}) {
+    if (!store.has(normalized)) {
+      const role = metadata.role || 'Stakeholder'
+      const profile = {
+        id: normalized,
+        name: this.formatName(name),
+        originalNames: [name],
+        roles: role ? [role] : [],
+        type: role || 'Stakeholder',
+        mentions: [],
+        assignments: [],
+        frequency: 0,
+        confidence: 0,
+        power: 'Medium',
+        interest: 'Medium',
+        quadrant: 'monitor',
+        color: this.getQuadrantColor('Medium', 'Medium'),
+        influenceScore: 0,
+        engagementMetrics: {
+          touchpoints: 0,
+          assignments: 0,
+          lastInteraction: null,
+          lastAssignment: null,
+          activityScore: 0,
+          sentimentTrend: 'stable'
+        },
+        communicationPlan: null
+      }
+
+      store.set(normalized, profile)
+    }
+
+    const profile = store.get(normalized)
+
+    if (metadata.role) {
+      const resolvedRole = this.resolveRole(metadata.role)
+      if (!profile.roles.includes(resolvedRole)) {
+        profile.roles.push(resolvedRole)
+        profile.type = profile.roles[0]
       }
     }
 
-    // Determine interest level
-    if (this.STAKEHOLDER_TYPES[stakeholder.type]) {
-      interest = this.STAKEHOLDER_TYPES[stakeholder.type].interest
-    } else {
-      const text = stakeholder.mentions.map(m => m.context || '').join(' ').toLowerCase()
-      
-      if (this.INTEREST_KEYWORDS.high.some(kw => text.includes(kw))) {
-        interest = 'High'
-      } else if (this.INTEREST_KEYWORDS.low.some(kw => text.includes(kw))) {
-        interest = 'Low'
+    if (!profile.originalNames.includes(name)) {
+      profile.originalNames.push(name)
+    }
+
+    return profile
+  }
+
+  resolveRole(role) {
+    if (!role) return 'Stakeholder'
+    const normalized = role.trim().toLowerCase()
+
+    const directMatch = Object.keys(this.roleMapping).find(key => key.toLowerCase() === normalized)
+    if (directMatch) return directMatch
+
+    const domainMatch = Array.from(this.stakeholderTypes).find(item => item.toLowerCase() === normalized)
+    if (domainMatch) return domainMatch
+
+    return role
+      .split(/\s+/)
+      .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join(' ')
+  }
+
+  updateEngagementMetrics(profile, { type, timestamp } = {}) {
+    if (!profile || !profile.engagementMetrics) return
+
+    const metrics = profile.engagementMetrics
+    const isoTimestamp = timestamp ? new Date(timestamp).toISOString() : new Date().toISOString()
+
+    metrics.touchpoints = profile.mentions.length
+    metrics.assignments = profile.assignments.length
+    metrics.lastInteraction = isoTimestamp
+
+    if (type === 'assignment') {
+      metrics.lastAssignment = isoTimestamp
+    }
+  }
+
+  determinePowerLevel(profile, combinedText = '') {
+    for (const role of profile.roles) {
+      const mapping = this.roleMapping[role]
+      if (mapping?.power) {
+        return mapping.power
       }
     }
 
-    stakeholder.power = power
-    stakeholder.interest = interest
-    stakeholder.quadrant = this.getQuadrant(power, interest)
-    stakeholder.color = this.getQuadrantColor(power, interest)
+    const text = `${profile.name} ${combinedText}`.toLowerCase()
 
-    return stakeholder
+    if (this.powerKeywords.high?.some(keyword => text.includes(keyword))) return 'High'
+    if (this.powerKeywords.low?.some(keyword => text.includes(keyword))) return 'Low'
+
+    return 'Medium'
   }
 
-  /**
-   * Generate power/interest matrix data
-   */
+  determineInterestLevel(profile, combinedText = '') {
+    for (const role of profile.roles) {
+      const mapping = this.roleMapping[role]
+      if (mapping?.interest) {
+        return mapping.interest
+      }
+    }
+
+    const text = combinedText.toLowerCase()
+
+    if (this.interestKeywords.high?.some(keyword => text.includes(keyword))) return 'High'
+    if (this.interestKeywords.low?.some(keyword => text.includes(keyword))) return 'Low'
+
+    return 'Medium'
+  }
+
+  calculateActivityScore(profile) {
+    const touchpointScore = Math.min(5, profile.mentions.length) * 0.2
+    const assignmentScore = Math.min(5, profile.assignments.length) * 0.25
+    const influenceScore = (POWER_SCORES[profile.power] || 1) * (POWER_SCORES[profile.interest] || 1) * 0.1
+    const base = 1
+
+    return Number((base + touchpointScore + assignmentScore + influenceScore).toFixed(2))
+  }
+
+  calculateInfluenceScore(profile) {
+    const powerWeight = POWER_SCORES[profile.power] || 1
+    const interestWeight = POWER_SCORES[profile.interest] || 1
+    const interactionWeight = Math.log(profile.mentions.length + profile.assignments.length + 1)
+    const engagement = profile.engagementMetrics?.activityScore || 0
+
+    const influence = (powerWeight * 0.4) + (interestWeight * 0.3) + (interactionWeight * 0.2) + (engagement * 0.1)
+    return Number(influence.toFixed(2))
+  }
+
+  calculateConfidence(profile) {
+    const base = 0.45
+    const mentionScore = Math.min(0.3, profile.mentions.length * 0.07)
+    const assignmentScore = Math.min(0.15, profile.assignments.length * 0.05)
+    const roleScore = profile.roles.some(role => this.roleMapping[role]) ? 0.08 : 0
+    const confidence = Math.min(0.98, base + mentionScore + assignmentScore + roleScore)
+
+    return Number(confidence.toFixed(2))
+  }
+
+  buildCommunicationPlan(profile) {
+    const quadrantKey = profile.quadrant
+    const strategyKey = quadrantKey?.replace('-', '_')
+    const strategy = this.quadrantStrategies[strategyKey] || {}
+
+    return {
+      stakeholderId: profile.id,
+      stakeholderName: profile.name,
+      quadrant: quadrantKey,
+      objective: strategy.description || 'Maintain appropriate engagement level',
+      cadence: this.getCommunicationCadence(quadrantKey),
+      channels: this.getCommunicationChannels(quadrantKey),
+      owner: this.getEngagementOwner(quadrantKey, profile),
+      keyMessages: strategy.strategies || [],
+      successMetrics: {
+        targetTouchpoints: quadrantKey === 'manage' ? 4 : quadrantKey === 'keep-satisfied' ? 3 : quadrantKey === 'keep-informed' ? 2 : 1,
+        currentTouchpoints: profile.engagementMetrics.touchpoints,
+        activityScore: profile.engagementMetrics.activityScore
+      },
+      color: profile.color
+    }
+  }
+
+  getCommunicationCadence(quadrant) {
+    switch (quadrant) {
+      case 'manage':
+        return 'Weekly'
+      case 'keep-satisfied':
+        return 'Bi-weekly'
+      case 'keep-informed':
+        return 'Monthly'
+      default:
+        return 'Quarterly'
+    }
+  }
+
+  getCommunicationChannels(quadrant) {
+    switch (quadrant) {
+      case 'manage':
+        return ['Workshops', 'One-on-One Sessions', 'Steering Committee']
+      case 'keep-satisfied':
+        return ['Executive Briefings', 'Email Summaries', 'Quarterly Reviews']
+      case 'keep-informed':
+        return ['Project Newsletter', 'Demo Sessions', 'Teams Updates']
+      default:
+        return ['Status Email', 'Quarterly Report']
+    }
+  }
+
+  getEngagementOwner(quadrant, profile) {
+    if (profile.roles.includes('Business Analyst')) {
+      return 'Business Analysis Team'
+    }
+
+    switch (quadrant) {
+      case 'manage':
+        return 'Product Leadership'
+      case 'keep-satisfied':
+        return 'Executive Sponsor'
+      case 'keep-informed':
+        return 'Project Communications'
+      default:
+        return 'PMO'
+    }
+  }
+
   generatePowerInterestMatrix(stakeholders = null) {
     const data = stakeholders || Array.from(this.stakeholders.values())
 
@@ -199,14 +377,23 @@ class StakeholderService {
         byQuadrant: {},
         byType: {},
         averagePower: 0,
-        averageInterest: 0
+        averageInterest: 0,
+        engagement: {
+          totalTouchpoints: 0,
+          totalAssignments: 0,
+          averageActivity: 0
+        }
       }
     }
 
-    // Categorize stakeholders
+    let powerAccumulator = 0
+    let interestAccumulator = 0
+    let activityAccumulator = 0
+
     data.forEach(stakeholder => {
       const quadrant = stakeholder.quadrant || this.getQuadrant(stakeholder.power, stakeholder.interest)
-      
+      const activity = stakeholder.engagementMetrics?.activityScore || 0
+
       switch (quadrant) {
         case 'manage':
           matrix.highPowerHighInterest.push(stakeholder)
@@ -217,19 +404,19 @@ class StakeholderService {
         case 'keep-informed':
           matrix.lowPowerHighInterest.push(stakeholder)
           break
-        case 'monitor':
+        default:
           matrix.lowPowerLowInterest.push(stakeholder)
-          break
       }
 
-      // Aggregate by type
-      if (!matrix.summary.byType[stakeholder.type]) {
-        matrix.summary.byType[stakeholder.type] = 0
-      }
-      matrix.summary.byType[stakeholder.type] += 1
+      matrix.summary.byType[stakeholder.type] = (matrix.summary.byType[stakeholder.type] || 0) + 1
+      matrix.summary.engagement.totalTouchpoints += stakeholder.engagementMetrics?.touchpoints || 0
+      matrix.summary.engagement.totalAssignments += stakeholder.engagementMetrics?.assignments || 0
+
+      powerAccumulator += POWER_SCORES[stakeholder.power] || 0
+      interestAccumulator += POWER_SCORES[stakeholder.interest] || 0
+      activityAccumulator += activity
     })
 
-    // Calculate aggregates
     matrix.summary.byQuadrant = {
       manage: matrix.highPowerHighInterest.length,
       keep_satisfied: matrix.highPowerLowInterest.length,
@@ -237,170 +424,247 @@ class StakeholderService {
       monitor: matrix.lowPowerLowInterest.length
     }
 
+    if (data.length > 0) {
+      matrix.summary.averagePower = Number((powerAccumulator / data.length).toFixed(2))
+      matrix.summary.averageInterest = Number((interestAccumulator / data.length).toFixed(2))
+      matrix.summary.engagement.averageActivity = Number((activityAccumulator / data.length).toFixed(2))
+    }
+
     return matrix
   }
 
-  /**
-   * Analyze stakeholder influence network
-   */
+  generateCommunicationPlans(stakeholders = null) {
+    const data = stakeholders || Array.from(this.stakeholders.values())
+    return data.map(stakeholder => stakeholder.communicationPlan || this.buildCommunicationPlan(stakeholder))
+  }
+
+  validateAssignments(tickets = [], stakeholders = null) {
+    const stakeholderData = stakeholders || Array.from(this.stakeholders.values())
+    const stakeholderIndex = new Map(stakeholderData.map(s => [this.normalizeName(s.name), s]))
+
+    const { validFormats = [], requiredFields = [], teamAssignments = {} } = this.assigneeRules
+
+    const results = {
+      valid: true,
+      errors: [],
+      warnings: [],
+      assignmentsChecked: []
+    }
+
+    tickets.forEach((ticket, index) => {
+      const ticketId = ticket?.id || `ticket-${index + 1}`
+      const entry = {
+        ticketId,
+        assignee: ticket?.assignee || 'Unassigned',
+        status: 'valid',
+        issues: []
+      }
+
+      if (!ticket?.assignee || ticket.assignee === 'Unassigned') {
+        entry.status = 'warning'
+        entry.issues.push('Missing assignee')
+        results.warnings.push(`Ticket ${ticketId}: Missing assignee`)
+        results.assignmentsChecked.push(entry)
+        return
+      }
+
+      const assigneeName = ticket.assignee
+      const normalized = this.normalizeName(assigneeName)
+      const profile = stakeholderIndex.get(normalized)
+
+      const formatMatches = validFormats.length === 0 || validFormats.some(pattern => {
+        try {
+          pattern.lastIndex = 0
+        } catch (error) {
+          // ignore patterns without lastIndex
+        }
+        return pattern.test(assigneeName)
+      })
+
+      if (!formatMatches) {
+        entry.status = 'error'
+        entry.issues.push('Assignee does not match required naming formats')
+        results.errors.push(`Ticket ${ticketId}: Assignee "${assigneeName}" does not match valid formats`)
+      }
+
+      if (ticket.assigneeDetails) {
+        requiredFields.forEach(field => {
+          if (!ticket.assigneeDetails[field]) {
+            entry.status = 'error'
+            entry.issues.push(`Missing required field: ${field}`)
+            results.errors.push(`Ticket ${ticketId}: Missing assignee field "${field}"`)
+          }
+        })
+      } else if (requiredFields.length > 0) {
+        entry.status = entry.status === 'error' ? 'error' : 'warning'
+        entry.issues.push('Assignee details missing for required fields')
+        results.warnings.push(`Ticket ${ticketId}: Assignee details missing (expected fields: ${requiredFields.join(', ')})`)
+      }
+
+      if (ticket.assigneeTeam && teamAssignments[ticket.assigneeTeam]) {
+        const assigneeEmail = ticket.assigneeEmail || ticket.assigneeDetails?.email
+        if (assigneeEmail && !teamAssignments[ticket.assigneeTeam].includes(assigneeEmail)) {
+          entry.status = 'error'
+          entry.issues.push('Assignee email not authorized for team assignment')
+          results.errors.push(`Ticket ${ticketId}: Assignee email ${assigneeEmail} not authorized for team ${ticket.assigneeTeam}`)
+        }
+      }
+
+      if (!profile) {
+        entry.status = entry.status === 'error' ? 'error' : 'warning'
+        entry.issues.push('Assignee not found in stakeholder analysis')
+        results.warnings.push(`Ticket ${ticketId}: Assignee "${assigneeName}" not identified in stakeholder analysis`)
+      } else if (ticket.assigneeRole) {
+        const expectedRole = profile.type
+        if (this.normalizeRole(ticket.assigneeRole) !== this.normalizeRole(expectedRole)) {
+          entry.status = entry.status === 'error' ? 'error' : 'warning'
+          entry.issues.push(`Role mismatch: ticket role "${ticket.assigneeRole}" vs stakeholder role "${expectedRole}"`)
+          results.warnings.push(`Ticket ${ticketId}: Role mismatch for ${assigneeName} (${ticket.assigneeRole} vs ${expectedRole})`)
+        }
+      }
+
+      if (entry.status === 'valid' && entry.issues.length === 0) {
+        entry.status = 'valid'
+      }
+
+      results.assignmentsChecked.push(entry)
+    })
+
+    results.valid = results.errors.length === 0
+    return results
+  }
+
   analyzeInfluenceNetwork(stakeholders = null) {
     const data = stakeholders || Array.from(this.stakeholders.values())
+    const { minEdgeWeight = 1, topRelationships = 50 } = this.networkSettings
 
-    const nodes = data.map(s => ({
-      id: this.normalizeName(s.name),
-      label: s.name,
-      type: s.type,
-      power: s.power,
-      interest: s.interest,
-      frequency: s.frequency,
-      color: s.color || this.getQuadrantColor(s.power, s.interest),
-      size: Math.max(20, Math.min(50, 15 + s.frequency * 5))
+    const nodes = data.map(profile => ({
+      id: profile.id,
+      label: profile.name,
+      type: profile.type,
+      power: profile.power,
+      interest: profile.interest,
+      frequency: profile.frequency,
+      color: profile.color,
+      size: Math.max(20, Math.min(50, 15 + profile.frequency * 5)),
+      activityScore: profile.engagementMetrics?.activityScore || 0
     }))
 
-    // Build relationships based on co-mentions
     const edges = []
-    const mentioned = new Map()
+    const mentionsByTicket = new Map()
 
-    data.forEach(stakeholder => {
-      stakeholder.mentions.forEach(mention => {
-        if (!mentioned.has(mention.ticketId)) {
-          mentioned.set(mention.ticketId, [])
+    data.forEach(profile => {
+      profile.mentions.forEach(mention => {
+        if (!mentionsByTicket.has(mention.ticketId)) {
+          mentionsByTicket.set(mention.ticketId, new Set())
         }
-        mentioned.get(mention.ticketId).push(this.normalizeName(stakeholder.name))
+        mentionsByTicket.get(mention.ticketId).add(profile.id)
       })
     })
 
-    // Create edges between co-mentioned stakeholders
-    mentioned.forEach((names, ticketId) => {
-      for (let i = 0; i < names.length; i++) {
-        for (let j = i + 1; j < names.length; j++) {
-          const existingEdge = edges.find(e => 
-            (e.from === names[i] && e.to === names[j]) || 
-            (e.from === names[j] && e.to === names[i])
-          )
-          
+    mentionsByTicket.forEach(stakeholdersInTicket => {
+      const names = Array.from(stakeholdersInTicket)
+      for (let i = 0; i < names.length; i += 1) {
+        for (let j = i + 1; j < names.length; j += 1) {
+          const existingEdge = edges.find(edge => (
+            (edge.from === names[i] && edge.to === names[j]) ||
+            (edge.from === names[j] && edge.to === names[i])
+          ))
+
           if (existingEdge) {
             existingEdge.weight += 1
           } else {
-            edges.push({
-              from: names[i],
-              to: names[j],
-              weight: 1
-            })
+            edges.push({ from: names[i], to: names[j], weight: 1 })
           }
         }
       }
     })
 
-    // Sort edges by weight
-    edges.sort((a, b) => b.weight - a.weight)
+    const filteredEdges = edges
+      .filter(edge => edge.weight >= minEdgeWeight)
+      .sort((a, b) => b.weight - a.weight)
+      .slice(0, topRelationships)
 
     return {
       nodes,
-      edges: edges.slice(0, 50), // Top 50 relationships
+      edges: filteredEdges,
       network: {
         nodeCount: nodes.length,
-        edgeCount: edges.length,
-        density: edges.length / (nodes.length * (nodes.length - 1) / 2),
+        edgeCount: filteredEdges.length,
+        density: nodes.length > 1 ? filteredEdges.length / (nodes.length * (nodes.length - 1) / 2) : 0,
         topInfluencers: this.getTopInfluencers(data)
       }
     }
   }
 
-  /**
-   * Get top influencers by power and frequency
-   */
   getTopInfluencers(stakeholders) {
     return stakeholders
-      .map(s => ({
-        ...s,
-        influenceScore: (
-          (s.power === 'High' ? 3 : s.power === 'Medium' ? 2 : 1) *
-          (s.interest === 'High' ? 3 : s.interest === 'Medium' ? 2 : 1) *
-          Math.log(s.frequency + 1)
+      .map(profile => ({
+        ...profile,
+        influenceComposite: (
+          (POWER_SCORES[profile.power] || 1) *
+          (POWER_SCORES[profile.interest] || 1) *
+          (profile.engagementMetrics?.activityScore || 1)
         )
       }))
-      .sort((a, b) => b.influenceScore - a.influenceScore)
-      .slice(0, 10)
-      .map(({ influenceScore, ...s }) => s)
+      .sort((a, b) => b.influenceComposite - a.influenceComposite)
+      .slice(0, this.networkSettings.topInfluencers || 10)
+      .map(({ influenceComposite, ...rest }) => rest)
   }
 
-  /**
-   * Get engagement recommendations
-   */
   getEngagementRecommendations(matrix) {
     const recommendations = []
 
-    // Manage closely (High Power, High Interest)
-    if (matrix.highPowerHighInterest.length > 0) {
+    const addRecommendation = (key, stakeholders) => {
+      if (!stakeholders || stakeholders.length === 0) return
+      const strategy = this.quadrantStrategies[key] || {}
+      const formattedKey = key.replace('_', '-')
+
       recommendations.push({
-        quadrant: 'manage',
-        title: 'Manage Closely',
-        stakeholders: matrix.highPowerHighInterest,
-        strategies: [
-          'Involve in key decisions and planning',
-          'Regular updates and consultations',
-          'Address concerns proactively',
-          'Seek active participation'
-        ],
-        color: '#d4185d'
+        quadrant: formattedKey,
+        title: strategy.title || formattedKey,
+        stakeholders,
+        strategies: strategy.strategies || [],
+        color: strategy.color || this.getQuadrantColor(
+          formattedKey === 'keep-satisfied' ? 'High' : formattedKey === 'keep-informed' ? 'Low' : 'Low',
+          formattedKey === 'manage' ? 'High' : formattedKey === 'keep-informed' ? 'High' : 'Low'
+        )
       })
     }
 
-    // Keep Satisfied (High Power, Low Interest)
-    if (matrix.highPowerLowInterest.length > 0) {
-      recommendations.push({
-        quadrant: 'keep-satisfied',
-        title: 'Keep Satisfied',
-        stakeholders: matrix.highPowerLowInterest,
-        strategies: [
-          'Regular updates with key information',
-          'Highlight outcomes and benefits',
-          'Avoid over-communication',
-          'Ensure expectations are clear'
-        ],
-        color: '#ff6600'
-      })
-    }
-
-    // Keep Informed (Low Power, High Interest)
-    if (matrix.lowPowerHighInterest.length > 0) {
-      recommendations.push({
-        quadrant: 'keep-informed',
-        title: 'Keep Informed',
-        stakeholders: matrix.lowPowerHighInterest,
-        strategies: [
-          'Provide regular updates',
-          'Include in relevant discussions',
-          'Share progress and milestones',
-          'Answer questions promptly'
-        ],
-        color: '#009900'
-      })
-    }
-
-    // Monitor (Low Power, Low Interest)
-    if (matrix.lowPowerLowInterest.length > 0) {
-      recommendations.push({
-        quadrant: 'monitor',
-        title: 'Monitor',
-        stakeholders: matrix.lowPowerLowInterest,
-        strategies: [
-          'General awareness only',
-          'Minimal communication',
-          'Watch for changes in interest/power',
-          'Provide information if requested'
-        ],
-        color: '#cccccc'
-      })
-    }
+    addRecommendation('manage', matrix.highPowerHighInterest)
+    addRecommendation('keep_satisfied', matrix.highPowerLowInterest)
+    addRecommendation('keep_informed', matrix.lowPowerHighInterest)
+    addRecommendation('monitor', matrix.lowPowerLowInterest)
 
     return recommendations
   }
 
-  /**
-   * Helper: Get quadrant name
-   */
+  inferRole(name, context = '') {
+    const searchSpace = `${name} ${context}`.toLowerCase()
+
+    const roleMatch = Object.keys(this.roleMapping).find(role => searchSpace.includes(role.toLowerCase()))
+    if (roleMatch) return roleMatch
+
+    const typeMatch = Array.from(this.stakeholderTypes).find(type => searchSpace.includes(type.toLowerCase()))
+    if (typeMatch) return typeMatch
+
+    return 'Stakeholder'
+  }
+
+  normalizeRole(role = '') {
+    return role.trim().toLowerCase()
+  }
+
+  getSnippet(context = '', name = '') {
+    const index = context.toLowerCase().indexOf(name.trim().toLowerCase())
+    if (index === -1) {
+      return context.slice(0, 100)
+    }
+
+    return context.slice(Math.max(0, index - 40), index + name.length + 60)
+  }
+
   getQuadrant(power, interest) {
     if (power === 'High' && interest === 'High') return 'manage'
     if (power === 'High' && interest === 'Low') return 'keep-satisfied'
@@ -408,103 +672,39 @@ class StakeholderService {
     return 'monitor'
   }
 
-  /**
-   * Helper: Get quadrant color
-   */
   getQuadrantColor(power, interest) {
-    if (power === 'High' && interest === 'High') return '#d4185d' // Red
-    if (power === 'High' && interest === 'Low') return '#ff6600' // Orange
-    if (power === 'Low' && interest === 'High') return '#009900' // Green
-    return '#cccccc' // Gray
-  }
+    const quadrant = typeof power === 'string' && typeof interest === 'string'
+      ? this.getQuadrant(power, interest)
+      : power
 
-  /**
-   * Helper: Infer stakeholder type from name
-   */
-  inferType(name) {
-    const lower = name.toLowerCase()
-    
-    for (const [type, _] of Object.entries(this.STAKEHOLDER_TYPES)) {
-      if (lower.includes(type.toLowerCase())) {
-        return type
-      }
+    const strategy = this.quadrantStrategies[quadrant?.replace('-', '_')]
+    if (strategy?.color) return strategy.color
+
+    switch (quadrant) {
+      case 'manage':
+        return '#d4185d'
+      case 'keep-satisfied':
+        return '#ff6600'
+      case 'keep-informed':
+        return '#009900'
+      default:
+        return '#cccccc'
     }
-    
-    return 'Stakeholder'
   }
 
-  /**
-   * Helper: Normalize name for comparison
-   */
-  normalizeName(name) {
-    return name
-      .toLowerCase()
-      .trim()
-      .replace(/\s+/g, '-')
+  normalizeName(name = '') {
+    return name.toLowerCase().trim().replace(/\s+/g, '-')
   }
 
-  /**
-   * Helper: Format name for display
-   */
-  formatName(name) {
+  formatName(name = '') {
     return name
-      .split(/[\s-]+/)
+      .split(/\s+/)
       .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
       .join(' ')
   }
 
-  /**
-   * Validate stakeholder data
-   */
-  validateStakeholders(stakeholders) {
-    const issues = []
-
-    stakeholders.forEach((s, index) => {
-      if (!s.name || s.name.trim().length === 0) {
-        issues.push(`Stakeholder ${index}: Missing name`)
-      }
-      if (!['Low', 'Medium', 'High'].includes(s.power)) {
-        issues.push(`Stakeholder ${s.name}: Invalid power level`)
-      }
-      if (!['Low', 'Medium', 'High'].includes(s.interest)) {
-        issues.push(`Stakeholder ${s.name}: Invalid interest level`)
-      }
-      if (!s.mentions || s.mentions.length === 0) {
-        issues.push(`Stakeholder ${s.name}: No mentions found (possible hallucination)`)
-      }
-    })
-
-    return {
-      valid: issues.length === 0,
-      issues,
-      warnings: this.detectPotentialHallucinations(stakeholders)
-    }
-  }
-
-  /**
-   * Detect hallucinated stakeholders
-   */
-  detectPotentialHallucinations(stakeholders) {
-    const warnings = []
-
-    stakeholders.forEach(s => {
-      // Flag stakeholders with very low frequency
-      if (s.frequency === 1 && s.confidence < 0.6) {
-        warnings.push(`${s.name}: Single mention with low confidence (possible hallucination)`)
-      }
-
-      // Flag generic names
-      if (s.name.length < 4 || s.name === 'User' || s.name === 'Team') {
-        warnings.push(`${s.name}: Generic name (verify in source data)`)
-      }
-
-      // Flag malformed data
-      if (s.name.includes(',') || s.name.includes('@') || s.name.length > 50) {
-        warnings.push(`${s.name}: Suspicious format (verify extraction)`)
-      }
-    })
-
-    return warnings
+  getStakeholderProfiles() {
+    return Array.from(this.stakeholders.values())
   }
 }
 

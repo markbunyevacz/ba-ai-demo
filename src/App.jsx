@@ -209,11 +209,15 @@ function App() {
           // Validate stakeholder data
           const validation = groundingService.validateStakeholders(extractedStakeholders)
           const hallucinations = groundingService.detectStakeholderHallucinations(extractedStakeholders, data.tickets)
-          
+          const communicationPlans = stakeholderService.generateCommunicationPlans(extractedStakeholders)
+          const assignmentValidation = stakeholderService.validateAssignments(data.tickets, extractedStakeholders)
+
           setStakeholderValidation({
             ...validation,
             hallucinations: hallucinations.hallucinations,
-            suspiciousPatterns: hallucinations.suspiciousPatterns
+            suspiciousPatterns: hallucinations.suspiciousPatterns,
+            communicationPlans,
+            assignmentValidation
           })
         } catch (stakeholderError) {
           console.error('Stakeholder analysis error:', stakeholderError)

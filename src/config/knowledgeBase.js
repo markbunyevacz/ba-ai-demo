@@ -101,6 +101,73 @@ export const BUSINESS_RULES = {
         validFormat: /^[A-Za-z0-9\s\-_.,!?()]+$/
       }
     }
+  },
+
+  // BACCM Alignment Rules
+  BACCM_RULES: {
+    requiredConcepts: ['Change', 'Need', 'Solution', 'Stakeholder', 'Value', 'Context'],
+    conceptDescriptions: {
+      Change: 'What is being transformed or modified within the organization',
+      Need: 'The problem or opportunity that triggers the change',
+      Solution: 'The specific option chosen to satisfy the identified need',
+      Stakeholder: 'People or groups affected by or influencing the change',
+      Value: 'Measurable improvement delivered by addressing the need',
+      Context: 'Circumstances surrounding and influencing the change'
+    },
+    validationChecks: {
+      Change: {
+        requiredFields: ['description', 'business_value'],
+        keywords: ['change', 'transition', 'improve', 'upgrade', 'migrate']
+      },
+      Need: {
+        requiredFields: ['problem_statement', 'current_state'],
+        keywords: ['need', 'issue', 'challenge', 'gap', 'requirement']
+      },
+      Solution: {
+        requiredFields: ['proposed_solution', 'solution_details'],
+        keywords: ['solution', 'approach', 'implementation', 'design', 'option']
+      },
+      Stakeholder: {
+        requiredFields: ['stakeholders', 'stakeholder_roles'],
+        keywords: ['stakeholder', 'user', 'customer', 'sponsor', 'team']
+      },
+      Value: {
+        requiredFields: ['business_value', 'success_metrics'],
+        keywords: ['value', 'benefit', 'outcome', 'impact', 'metrics']
+      },
+      Context: {
+        requiredFields: ['current_state', 'constraints'],
+        keywords: ['context', 'environment', 'constraint', 'assumption', 'dependency']
+      }
+    },
+    complianceThreshold: 0.6
+  },
+
+  // Strategic Analysis Rules
+  STRATEGIC_RULES: {
+    pestle: {
+      minConfidence: 0.25,
+      riskWeight: 0.55,
+      opportunityWeight: 0.45,
+      maxSignalsPerFactor: 5
+    },
+    swot: {
+      minConfidence: 0.2,
+      maxItemsPerCategory: 4,
+      internalFactors: ['strengths', 'weaknesses'],
+      externalFactors: ['opportunities', 'threats']
+    },
+    recommendations: {
+      maxRecommendations: 5,
+      priorityWeights: {
+        urgency: 0.4,
+        impact: 0.35,
+        feasibility: 0.25
+      },
+      defaultUrgency: 'Medium',
+      defaultImpact: 'Medium',
+      defaultFeasibility: 'Medium'
+    }
   }
 }
 
@@ -134,6 +201,75 @@ export const VALIDATION_PATTERNS = {
   }
 }
 
+export const STRATEGIC_ANALYSIS = {
+  PESTLE_FACTORS: {
+    Political: {
+      description: 'Government policies, regulations, stability, and trade controls affecting the initiative',
+      riskKeywords: ['regulation', 'policy change', 'compliance', 'tariff', 'sanction', 'government approval'],
+      opportunityKeywords: ['incentive', 'subsidy', 'public funding', 'government support', 'regulatory alignment'],
+      monitoringSignals: ['new legislation', 'election cycle', 'policy update', 'governance change']
+    },
+    Economic: {
+      description: 'Economic trends, market conditions, and financial constraints impacting value',
+      riskKeywords: ['budget cut', 'recession', 'cost increase', 'inflation', 'market decline'],
+      opportunityKeywords: ['cost saving', 'efficiency', 'revenue growth', 'market expansion', 'investment'],
+      monitoringSignals: ['roi', 'financial forecast', 'cost-benefit', 'economic indicator']
+    },
+    Social: {
+      description: 'Cultural, demographic, and societal factors influencing stakeholders',
+      riskKeywords: ['resistance', 'adoption challenge', 'skill gap', 'user dissatisfaction', 'workforce impact'],
+      opportunityKeywords: ['training', 'engagement', 'customer satisfaction', 'collaboration', 'community'],
+      monitoringSignals: ['change management', 'user feedback', 'stakeholder sentiment', 'employee readiness']
+    },
+    Technological: {
+      description: 'Technological trends, capabilities, and dependencies shaping the solution',
+      riskKeywords: ['technical debt', 'integration issue', 'legacy system', 'downtime', 'cybersecurity risk'],
+      opportunityKeywords: ['automation', 'innovation', 'cloud adoption', 'scalability', 'modernization'],
+      monitoringSignals: ['technology roadmap', 'system upgrade', 'platform', 'infrastructure']
+    },
+    Legal: {
+      description: 'Legal constraints, compliance requirements, and contractual obligations',
+      riskKeywords: ['non-compliance', 'legal dispute', 'licensing', 'data privacy', 'audit finding'],
+      opportunityKeywords: ['regulatory approval', 'compliance certification', 'contract renewal', 'policy alignment'],
+      monitoringSignals: ['legal review', 'compliance audit', 'regulatory framework', 'data protection']
+    },
+    Environmental: {
+      description: 'Environmental sustainability, resource usage, and ecological considerations',
+      riskKeywords: ['emission', 'waste', 'environmental impact', 'resource scarcity', 'sustainability risk'],
+      opportunityKeywords: ['green energy', 'sustainability', 'carbon reduction', 'renewable', 'eco-friendly'],
+      monitoringSignals: ['environmental policy', 'sustainability goal', 'energy efficiency', 'environmental audit']
+    }
+  },
+  SWOT_CATEGORIES: {
+    strengths: {
+      description: 'Internal capabilities that create advantages',
+      indicators: ['competitive advantage', 'expertise', 'resource availability', 'positive feedback', 'high performance'],
+      sentiment: 'positive'
+    },
+    weaknesses: {
+      description: 'Internal limitations or gaps to address',
+      indicators: ['capacity constraint', 'skill gap', 'process bottleneck', 'defect rate', 'dependency'],
+      sentiment: 'negative'
+    },
+    opportunities: {
+      description: 'External chances to improve performance or outcomes',
+      indicators: ['market demand', 'partnership', 'technology upgrade', 'regulatory support', 'customer need'],
+      sentiment: 'positive'
+    },
+    threats: {
+      description: 'External factors that could harm the initiative',
+      indicators: ['competitor', 'market risk', 'compliance risk', 'budget pressure', 'stakeholder resistance'],
+      sentiment: 'negative'
+    }
+  },
+  RECOMMENDATION_TEMPLATES: {
+    mitigateRisk: 'Develop mitigation plan for {factor} risk relating to {signal}',
+    pursueOpportunity: 'Initiate opportunity assessment for {factor} opportunity: {signal}',
+    strengthenCapability: 'Invest in strengthening capability: {capability}',
+    monitorChange: 'Establish monitoring cadence for {factor} signals and report monthly'
+  }
+}
+
 export const DOMAIN_KNOWLEDGE = {
   // MVM-specific knowledge
   MVM_CONTEXT: {
@@ -164,6 +300,64 @@ export const DOMAIN_KNOWLEDGE = {
       'Product Owner', 'Scrum Master', 'Developer', 'Tester',
       'Business User', 'End User', 'Stakeholder', 'Sponsor'
     ]
+  },
+
+  // BACCM Core Concepts
+  BACCM_CONCEPTS: {
+    Change: {
+      description: 'The act of transformation in response to a need',
+      guidingQuestions: [
+        'What is being changed and why?',
+        'How does the current state differ from the desired future state?',
+        'What are the triggers and drivers of the change?'
+      ],
+      indicators: ['defined change scope', 'identified drivers', 'future state description']
+    },
+    Need: {
+      description: 'A problem, opportunity, or constraint motivating the change',
+      guidingQuestions: [
+        'What problem or opportunity exists?',
+        'Who experiences the need and to what extent?',
+        'What happens if the need is not addressed?'
+      ],
+      indicators: ['problem statement', 'impact assessment', 'root cause analysis']
+    },
+    Solution: {
+      description: 'A specific way to satisfy one or more identified needs',
+      guidingQuestions: [
+        'What options exist to address the need?',
+        'How does the proposed solution deliver value?',
+        'What are the solution components and scope?'
+      ],
+      indicators: ['solution options', 'implementation plan', 'solution scope']
+    },
+    Stakeholder: {
+      description: 'Groups or individuals who influence or are impacted by the change',
+      guidingQuestions: [
+        'Who is affected by the change?',
+        'Who has influence over the solution?',
+        'What are stakeholder expectations and concerns?'
+      ],
+      indicators: ['stakeholder matrix', 'engagement plan', 'role definitions']
+    },
+    Value: {
+      description: 'The benefit of a change expressed in terms meaningful to stakeholders',
+      guidingQuestions: [
+        'What measurable outcomes indicate success?',
+        'How does the solution improve current performance?',
+        'What metrics will be used to evaluate value?'
+      ],
+      indicators: ['value metrics', 'benefit analysis', 'acceptance criteria']
+    },
+    Context: {
+      description: 'The circumstances that influence the change, including environment and culture',
+      guidingQuestions: [
+        'What constraints or dependencies exist?',
+        'What organizational factors impact the change?',
+        'What assumptions must be validated?'
+      ],
+      indicators: ['environment analysis', 'assumption log', 'risk assessment']
+    }
   },
 
   PROCESS_PATTERNS: {
@@ -305,6 +499,13 @@ export const DOMAIN_KNOWLEDGE = {
       'AWS', 'Azure', 'Google Cloud', 'IBM Cloud'
     ]
   }
+}
+
+export const STRATEGIC_ANALYSIS_CONFIG = {
+  RULES: BUSINESS_RULES.STRATEGIC_RULES,
+  FACTORS: STRATEGIC_ANALYSIS.PESTLE_FACTORS,
+  SWOT: STRATEGIC_ANALYSIS.SWOT_CATEGORIES,
+  TEMPLATES: STRATEGIC_ANALYSIS.RECOMMENDATION_TEMPLATES
 }
 
 export const QUALITY_METRICS = {
