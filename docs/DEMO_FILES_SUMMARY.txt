@@ -1,0 +1,91 @@
+═══════════════════════════════════════════════════════════
+  BA AI DEMO - EXCEL FÁJLOK ÖSSZEFOGLALÓJA
+═══════════════════════════════════════════════════════════
+
+✅ LÉTREHOZOTT FÁJLOK:
+
+📁 docs/demo_simple.xlsx
+   • 3 ticket
+   • Egyszerű user story-k
+   • 2-3 acceptance criteria per ticket
+   • Demo idő: 2-3 perc
+   • Use case: Gyors bemutató, alapfunkciók
+
+📁 docs/demo_normal.xlsx
+   • 5 ticket
+   • Közepes komplexitású követelmények
+   • 4-5 acceptance criteria per ticket
+   • MVM energia-specifikus példák
+   • Demo idő: 5-7 perc
+   • Use case: Standard bemutató, részletes funkciók
+
+📁 docs/demo_complex.xlsx
+   • 10 ticket
+   • Komplex, enterprise-szintű követelmények
+   • 6-8 acceptance criteria per ticket
+   • Vegyes prioritások (Kritikus → Alacsony)
+   • Technikai részletek (ML, IoT, RBAC, stb.)
+   • Demo idő: 10-15 perc
+   • Use case: Technikai vezetőknek, C-level
+
+═══════════════════════════════════════════════════════════
+
+📊 ÖSSZEHASONLÍTÁS:
+
+┌─────────────┬────────┬────────┬─────────┐
+│             │ Simple │ Normal │ Complex │
+├─────────────┼────────┼────────┼─────────┤
+│ Ticketek    │   3    │   5    │   10    │
+│ Criteria    │  2-3   │  4-5   │  6-8    │
+│ Demo idő    │ 2-3 m  │ 5-7 m  │ 10-15 m │
+│ Manuális    │ 27 m   │ 45 m   │ 90 m    │
+│ AI idő      │ 35 s   │ 35 s   │ 35 s    │
+│ Megtakarítás│ 98%    │ 93%    │ 99%     │
+└─────────────┴────────┴────────┴─────────┘
+
+═══════════════════════════════════════════════════════════
+
+📋 EXCEL STRUKTÚRA (minden fájlban):
+
+Oszlopok:
+  1. User Story ................... (kötelező)
+  2. Prioritás .................... Kritikus/Magas/Közepes/Alacsony
+  3. Hozzárendelt ................. Felelős személy
+  4. Epic ......................... Epic kategória
+  5. Elfogadási Kritériumok ....... Soronként vagy \n-el elválasztva
+
+═══════════════════════════════════════════════════════════
+
+🎯 HASZNÁLATI FORGATÓKÖNYVEK:
+
+1. GYORS DEMO (5 perc)
+   → demo_simple.xlsx
+   → Célközönség: Gyors overview-t igénylő vezetők
+   → Fókusz: Alapvető workflow
+
+2. STANDARD DEMO (10 perc)
+   → demo_normal.xlsx
+   → Célközönség: BA team, middle management
+   → Fókusz: MVM-specifikus use case-ek, AI
+
+3. RÉSZLETES DEMO (15-20 perc)
+   → demo_complex.xlsx
+   → Célközönség: C-level, IT vezetők
+   → Fókusz: Enterprise architektúra, compliance
+
+═══════════════════════════════════════════════════════════
+
+📖 DOKUMENTÁCIÓ:
+
+  docs/DEMO_SCENARIOS.md
+  • Részletes leírás minden demo fájlról
+  • Ticket tartalom felsorolása
+  • Használati útmutató
+  • Demo tippek
+  • Troubleshooting
+
+═══════════════════════════════════════════════════════════
+
+Verzió: 1.0
+Létrehozva: 2025. október 12.
+

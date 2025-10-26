@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BA AI Asszisztens - MVM Demo</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>BA AI Asszisztens</h1>
+            <p class="subtitle">Excel → Jira Ticket Generálás</p>
+        </header>
+
+        <main>
+            <div class="upload-section">
+                <h2>Töltse fel a BA követelményeket</h2>
+                <p class="description">Excel fájl feltöltése Jira ticket generáláshoz</p>
+
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-content">
+                        <div class="upload-icon">📎</div>
+                        <p>Húzza ide az Excel fájlt vagy <span class="upload-link" id="fileInputLink">kattintson a kiválasztáshoz</span></p>
+                        <input type="file" id="fileInput" accept=".xlsx,.xls" hidden>
+                    </div>
+                </div>
+
+                <button id="uploadBtn" class="upload-btn" disabled>
+                    Feltöltés és Feldolgozás
+                </button>
+            </div>
+
+            <div class="results-section" id="resultsSection">
+                <h2>Generált Jira Ticketek</h2>
+                <div id="ticketsContainer"></div>
+            </div>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
