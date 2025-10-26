@@ -127,8 +127,15 @@ class JiraService {
   /**
    * Make authenticated API call to Jira
    */
-  async apiCall(endpoint, method = 'GET', data = null, userId = null, accessToken = null) {
+  async apiCall(endpoint, method = 'GET', data = null, userId = null, accessToken = null, options = {}) {
     try {
+      const {
+        retry = true,
+        maxAttempts = 3,
+        retryDelay = 500,
+        retryStatusCodes = [408, 429, 500, 502, 503, 504]
+      } = options
+
       // Get access token
       let token
       if (accessToken) {
@@ -153,8 +160,26 @@ class JiraService {
         config.data = data
       }
 
-      const response = await axios(config)
-      return response.data
+      const executeRequest = async (attempt = 1) => {
+        try {
+          const response = await axios(config)
+          return response.data
+        } catch (error) {
+          const status = error.response?.status
+          const shouldRetry = retry && attempt < maxAttempts && retryStatusCodes.includes(status)
+
+          if (shouldRetry) {
+            const delay = retryDelay * Math.pow(2, attempt - 1)
+            console.warn(`Retrying Jira API call (${method} ${endpoint}) after ${delay}ms (attempt ${attempt + 1}/${maxAttempts}) due to status ${status}`)
+            await new Promise(resolve => setTimeout(resolve, delay))
+            return executeRequest(attempt + 1)
+          }
+
+          throw error
+        }
+      }
+
+      return await executeRequest()
     } catch (error) {
       console.error(`API call failed (${method} ${endpoint}):`, error.response?.data || error.message)
       throw error
@@ -246,7 +271,18 @@ class JiraService {
         })
       }
 
-      const response = await this.apiCall('/issues', 'POST', issueData, userId, accessToken)
+      const response = await this.apiCall(
+        '/issues',
+        'POST',
+        issueData,
+        userId,
+        accessToken,
+        {
+          retry: true,
+          maxAttempts: 4,
+          retryDelay: 700
+        }
+      )
       return response
     } catch (error) {
       console.error('Error creating Jira issue:', error.message)
@@ -263,21 +299,36 @@ class JiraService {
       const errors = []
 
       for (const ticket of tickets) {
-        try {
-          const result = await this.createIssue(ticket, userId, accessToken)
-          results.push({
-            success: true,
-            originalTicket: ticket,
-            jiraTicket: result,
-            issueKey: result.key,
-            issueId: result.id
-          })
-        } catch (error) {
-          errors.push({
-            success: false,
-            originalTicket: ticket,
-            error: error.message
-          })
+        let attempts = 0
+        let created = false
+
+        while (!created && attempts < 3) {
+          attempts += 1
+          try {
+            const result = await this.createIssue(ticket, userId, accessToken)
+            results.push({
+              success: true,
+              originalTicket: ticket,
+              jiraTicket: result,
+              issueKey: result.key,
+              issueId: result.id,
+              attempts
+            })
+            created = true
+          } catch (error) {
+            console.error(`Attempt ${attempts} to create Jira issue failed:`, error.message)
+
+            if (attempts >= 3) {
+              errors.push({
+                success: false,
+                originalTicket: ticket,
+                error: error.message
+              })
+            } else {
+              const backoff = 500 * Math.pow(2, attempts - 1)
+              await new Promise(resolve => setTimeout(resolve, backoff))
+            }
+          }
         }
       }
 
@@ -330,7 +381,18 @@ class JiraService {
         updateData.fields.assignee = { name: updates.assignee }
       }
 
-      const response = await this.apiCall(`/issues/${issueKey}`, 'PUT', updateData, userId, accessToken)
+      const response = await this.apiCall(
+        `/issues/${issueKey}`,
+        'PUT',
+        updateData,
+        userId,
+        accessToken,
+        {
+          retry: true,
+          maxAttempts: 3,
+          retryDelay: 600
+        }
+      )
       return response
     } catch (error) {
       console.error(`Error updating Jira issue ${issueKey}:`, error.message)
@@ -343,7 +405,18 @@ class JiraService {
    */
   async searchIssues(jql, userId, accessToken) {
     try {
-      const response = await this.apiCall(`/search?jql=${encodeURIComponent(jql)}`, 'GET', null, userId, accessToken)
+      const response = await this.apiCall(
+        `/search?jql=${encodeURIComponent(jql)}`,
+        'GET',
+        null,
+        userId,
+        accessToken,
+        {
+          retry: true,
+          maxAttempts: 3,
+          retryDelay: 600
+        }
+      )
       return response
     } catch (error) {
       console.error('Error searching Jira issues:', error.message)
@@ -356,7 +429,18 @@ class JiraService {
    */
   async getProject(projectKey, userId, accessToken) {
     try {
-      const response = await this.apiCall(`/projects/${projectKey}`, 'GET', null, userId, accessToken)
+      const response = await this.apiCall(
+        `/projects/${projectKey}`,
+        'GET',
+        null,
+        userId,
+        accessToken,
+        {
+          retry: true,
+          maxAttempts: 3,
+          retryDelay: 600
+        }
+      )
       return response
     } catch (error) {
       console.error(`Error getting project ${projectKey}:`, error.message)
@@ -369,7 +453,18 @@ class JiraService {
    */
   async getIssueTypes(userId, accessToken) {
     try {
-      const response = await this.apiCall('/issuetypes', 'GET', null, userId, accessToken)
+      const response = await this.apiCall(
+        '/issuetypes',
+        'GET',
+        null,
+        userId,
+        accessToken,
+        {
+          retry: true,
+          maxAttempts: 3,
+          retryDelay: 600
+        }
+      )
       return response
     } catch (error) {
       console.error('Error getting issue types:', error.message)
@@ -382,7 +477,18 @@ class JiraService {
    */
   async getIssue(issueKey, userId, accessToken) {
     try {
-      const response = await this.apiCall(`/issues/${issueKey}`, 'GET', null, userId, accessToken)
+      const response = await this.apiCall(
+        `/issues/${issueKey}`,
+        'GET',
+        null,
+        userId,
+        accessToken,
+        {
+          retry: true,
+          maxAttempts: 3,
+          retryDelay: 600
+        }
+      )
       return response
     } catch (error) {
       console.error(`Error getting issue ${issueKey}:`, error.message)

@@ -284,7 +284,10 @@ app.post('/api/upload/document', uploadWithFilter.single('file'), async (req, re
       console.log('Processing Word document:', req.file.originalname)
       
       const parser = new DocumentParser()
-      const plainText = await parser.parseWordDocument(req.file.buffer.buffer || req.file.buffer)
+      const wordBuffer = req.file.buffer.buffer || req.file.buffer
+      const structuredContent = await parser.extractStructuredContent(wordBuffer)
+      const plainText = structuredContent.text || await parser.parseWordDocument(wordBuffer)
+      const preview = parser.generateWordPreview(structuredContent)
       
       console.log('Extracted text from Word document (first 500 chars):', plainText.substring(0, 500))
 
@@ -319,7 +322,8 @@ app.post('/api/upload/document', uploadWithFilter.single('file'), async (req, re
       res.json({ 
         tickets: groundedTickets,
         source: 'document',
-        fileType: 'word'
+        fileType: 'word',
+        preview
       })
     } else {
       // Handle Excel file (keep existing logic for backward compatibility)
@@ -427,10 +431,15 @@ app.post('/api/upload/document', uploadWithFilter.single('file'), async (req, re
       })
 
       console.log('Generated tickets from Excel:', tickets.length)
+      const parser = new DocumentParser()
       res.json({ 
         tickets,
         source: 'document',
-        fileType: 'excel'
+        fileType: 'excel',
+        preview: parser.generateExcelPreview(rows, {
+          hasHeaderRow: true,
+          detectedColumns: Object.keys(columnIndices)
+        })
       })
     }
   } catch (error) {

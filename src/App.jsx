@@ -6,6 +6,7 @@ import GroundingDashboard from './components/GroundingDashboard'
 import StakeholderDashboard from './components/StakeholderDashboard'
 import BPMNViewer from './components/BPMNViewer'
 import FlowchartGenerator from './components/FlowchartGenerator'
+import DocumentPreview from './components/DocumentPreview'
 import bpmnService from './services/bpmnService'
 import stakeholderService from './services/stakeholderService'
 import groundingService from './services/groundingService'
@@ -29,6 +30,7 @@ function App() {
   const [workflow, setWorkflow] = useState(null)
   const [bpmnXml, setBpmnXml] = useState('')
   const [workflowError, setWorkflowError] = useState('')
+  const [documentPreview, setDocumentPreview] = useState(null)
   
   // New state for Jira OAuth
   const [jiraSessionId, setJiraSessionId] = useState(null)
@@ -138,6 +140,7 @@ function App() {
       setWorkflow(null)
       setBpmnXml('')
       setWorkflowError('')
+      setDocumentPreview(null)
       setError('')
     } else {
       setError('Kérjük, válasszon Excel (.xlsx) vagy Word (.docx) fájlt')
@@ -172,6 +175,7 @@ function App() {
       // Wait for ProgressBar animation to complete (3 seconds)
       setTimeout(() => {
         setTickets(data.tickets)
+        setDocumentPreview(data.preview || null)
 
         try {
           const workflowAnalysis = bpmnService.analyzeWorkflow(data.tickets)
@@ -252,18 +256,38 @@ function App() {
       }
 
       // Call real Jira API
-      const response = await fetch('/api/jira/create-tickets', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          tickets: tickets,
-          sessionId: jiraSessionId
-        })
-      })
+      const requestBody = {
+        tickets: tickets,
+        sessionId: jiraSessionId
+      }
 
-      const data = await response.json()
+      const sendRequest = async (attempt = 1) => {
+        const response = await fetch('/api/jira/create-tickets', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(requestBody)
+        })
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}))
+
+          if (response.status === 429 && attempt < 3) {
+            const delay = 1000 * Math.pow(2, attempt - 1)
+            console.warn(`Retrying Jira ticket creation after ${delay}ms (attempt ${attempt + 1}/3) due to rate limit`)
+            await new Promise(resolve => setTimeout(resolve, delay))
+            return sendRequest(attempt + 1)
+          }
+
+          return { response, data }
+        }
+
+        const data = await response.json()
+        return { response, data }
+      }
+
+      const { response, data } = await sendRequest()
 
       if (!response.ok) {
         // If unauthorized, clear session and redirect to login
@@ -289,8 +313,8 @@ function App() {
     } catch (error) {
       console.error('Jira küldés hiba:', error)
       setJiraError(`Jira küldés hiba: ${error.message}`)
-      setError(`Jira küldés hiba: ${error.message}`)
-      setTimeout(() => setError(''), 8000)
+        setError(`Jira küldés hiba: ${error.message}`)
+        setTimeout(() => setError(''), 8000)
     } finally {
       setIsJiraSending(false)
     }
@@ -408,6 +432,12 @@ function App() {
             />
           ) : (
             <ProgressBar />
+          )}
+
+          {showSuccess && documentPreview && (
+            <div className="mt-8">
+              <DocumentPreview preview={documentPreview} />
+            </div>
           )}
 
           {/* Grounding Dashboard */}

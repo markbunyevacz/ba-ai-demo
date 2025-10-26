@@ -166,6 +166,13 @@ export const DOMAIN_KNOWLEDGE = {
     ]
   },
 
+  PROCESS_PATTERNS: {
+    taskKeywords: ['implement', 'develop', 'test', 'deploy', 'review'],
+    gatewayKeywords: ['if', 'when', 'depends', 'conditional', 'either'],
+    eventKeywords: ['trigger', 'start', 'end', 'complete', 'notify'],
+    sequenceIndicators: ['then', 'next', 'after', 'before', 'followed by']
+  },
+
   // Stakeholder Analysis Configuration
   STAKEHOLDER_ANALYSIS: {
     powerLevels: ['Low', 'Medium', 'High'],

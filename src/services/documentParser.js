@@ -46,6 +46,110 @@ class DocumentParser {
   }
 
   /**
+   * Generate preview metadata for Word documents based on structured content or plain text
+   * @param {Object|string} source - Structured content object or plain text string
+   * @param {Object} options - Preview options
+   * @returns {Object|null} Preview metadata for UI consumption
+   */
+  generateWordPreview(source, options = {}) {
+    if (!source) {
+      return null
+    }
+
+    const {
+      maxHeadings = 5,
+      maxParagraphs = 6
+    } = options
+
+    const structured = typeof source === 'object' && !Array.isArray(source) ? source : null
+    const textSource = structured?.text || (typeof source === 'string' ? source : '')
+
+    const cleanedParagraphs = textSource
+      .split(/\n+/)
+      .map(paragraph => paragraph.trim())
+      .filter(paragraph => paragraph.length > 0)
+
+    const wordCount = textSource
+      ? textSource
+          .trim()
+          .split(/\s+/)
+          .filter(Boolean)
+          .length
+      : 0
+
+    return {
+      type: 'word',
+      headings: structured?.headings ? structured.headings.slice(0, maxHeadings) : [],
+      paragraphs: cleanedParagraphs.slice(0, maxParagraphs),
+      paragraphCount: cleanedParagraphs.length,
+      wordCount,
+      listHighlights: structured?.lists ? structured.lists.slice(0, 3) : []
+    }
+  }
+
+  /**
+   * Generate preview metadata for Excel documents
+   * @param {Array[]} rows - Array of row arrays including optional header row
+   * @param {Object} options - Preview options
+   * @returns {Object|null} Preview metadata for UI consumption
+   */
+  generateExcelPreview(rows = [], options = {}) {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return null
+    }
+
+    const {
+      hasHeaderRow = true,
+      maxRows = 5,
+      detectedColumns = []
+    } = options
+
+    const normalizedRows = rows.map(row => Array.isArray(row) ? row : [])
+    const headerRow = hasHeaderRow ? normalizedRows[0] : options.headers || []
+    const dataRows = hasHeaderRow ? normalizedRows.slice(1) : normalizedRows
+    const headers = headerRow.length > 0
+      ? headerRow.map(header => String(header ?? '').trim() || 'Column')
+      : options.headers || []
+
+    const maxColumns = headers.length
+    const rowSamples = dataRows.slice(0, maxRows).map(row => {
+      return headers.map((_, index) => {
+        const cellValue = row[index]
+        if (cellValue === null || cellValue === undefined) {
+          return ''
+        }
+        if (cellValue instanceof Date) {
+          return cellValue.toISOString()
+        }
+        return String(cellValue).trim()
+      })
+    })
+
+    const totalRows = dataRows.length
+    const emptyCellCount = dataRows.reduce((count, row) => {
+      return count + headers.reduce((rowCount, _, index) => {
+        const value = row[index]
+        const isEmpty = value === null || value === undefined || String(value).trim().length === 0
+        return rowCount + (isEmpty ? 1 : 0)
+      }, 0)
+    }, 0)
+
+    const totalCells = totalRows * (maxColumns || 1)
+    const emptyCellRatio = totalCells > 0 ? emptyCellCount / totalCells : 0
+
+    return {
+      type: 'excel',
+      headers,
+      rowSamples,
+      sampleCount: rowSamples.length,
+      totalRows,
+      totalColumns: maxColumns,
+      detectedColumns,
+      emptyCellRatio
+    }
+  }
+
+  /**
    * Extract metadata from Word document
    * @param {Buffer} buffer - The .docx file buffer
    * @returns {Promise<Object>} Document metadata (author, creation date, etc.)
