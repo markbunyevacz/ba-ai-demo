@@ -6,10 +6,13 @@ import GroundingDashboard from './components/GroundingDashboard'
 import StakeholderDashboard from './components/StakeholderDashboard'
 import BPMNViewer from './components/BPMNViewer'
 import FlowchartGenerator from './components/FlowchartGenerator'
+import DiagramViewer from './components/DiagramViewer'
 import DocumentPreview from './components/DocumentPreview'
 import bpmnService from './services/bpmnService'
 import stakeholderService from './services/stakeholderService'
 import groundingService from './services/groundingService'
+import monitoringService from './services/monitoringServiceInstance'
+import diagramClient from './services/diagramClient'
 
 function App() {
   const [uploadedFile, setUploadedFile] = useState(null)
@@ -30,6 +33,7 @@ function App() {
   const [workflow, setWorkflow] = useState(null)
   const [bpmnXml, setBpmnXml] = useState('')
   const [workflowError, setWorkflowError] = useState('')
+  const [diagram, setDiagram] = useState(null)
   const [documentPreview, setDocumentPreview] = useState(null)
   
   // New state for Jira OAuth
@@ -140,6 +144,7 @@ function App() {
       setWorkflow(null)
       setBpmnXml('')
       setWorkflowError('')
+      setDiagram(null)
       setDocumentPreview(null)
       setError('')
     } else {
@@ -176,6 +181,7 @@ function App() {
       setTimeout(() => {
         setTickets(data.tickets)
         setDocumentPreview(data.preview || null)
+        setDiagram(data.diagrams || null)
 
         try {
           const workflowAnalysis = bpmnService.analyzeWorkflow(data.tickets)
@@ -183,6 +189,7 @@ function App() {
           setWorkflow(workflowAnalysis)
           setBpmnXml(generatedXml)
           setWorkflowError('')
+
         } catch (workflowErr) {
           console.error('Workflow generation error:', workflowErr)
           setWorkflowError(`Nem sikerült a workflow létrehozása: ${workflowErr.message}`)
@@ -488,12 +495,19 @@ function App() {
                   }}
                 />
                 <div className="min-h-[640px]">
-                  <BPMNViewer
-                    xml={bpmnXml}
-                    allowEditing
-                    onExport={(xmlContent) => setBpmnXml(xmlContent)}
-                    onError={(errMsg) => setWorkflowError(errMsg)}
-                  />
+                  {diagram ? (
+                    <DiagramViewer
+                      diagram={diagram}
+                      onRefresh={(updated) => setDiagram(updated)}
+                    />
+                  ) : (
+                    <BPMNViewer
+                      xml={bpmnXml}
+                      allowEditing
+                      onExport={(xmlContent) => setBpmnXml(xmlContent)}
+                      onError={(errMsg) => setWorkflowError(errMsg)}
+                    />
+                  )}
                 </div>
               </div>
             </div>

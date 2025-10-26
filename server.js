@@ -10,6 +10,7 @@ import MonitoringService from './src/services/monitoringService.js'
 import JiraService from './src/services/jiraService.js'
 import SessionStore from './src/services/sessionStore.js'
 import DocumentParser from './src/services/documentParser.js'
+import diagramService from './src/services/diagramService.js'
 
 // Load environment variables
 dotenv.config()
@@ -319,11 +320,29 @@ app.post('/api/upload/document', uploadWithFilter.single('file'), async (req, re
       })
 
       console.log('Generated tickets from Word document:', groundedTickets.length)
+
+      let diagrams = null
+      try {
+        diagrams = await diagramService.generateFromTickets(groundedTickets, {
+          type: 'bpmn',
+          formats: ['svg', 'xml'],
+          diagramId: `word_${Date.now()}`,
+          workforceMetadata: {
+            fileName: req.file.originalname,
+            source: 'word-upload',
+            ticketCount: groundedTickets.length
+          }
+        })
+      } catch (diagramError) {
+        console.warn('Diagram generation failed for Word document:', diagramError.message)
+      }
+
       res.json({ 
         tickets: groundedTickets,
         source: 'document',
         fileType: 'word',
-        preview
+        preview,
+        diagrams
       })
     } else {
       // Handle Excel file (keep existing logic for backward compatibility)
@@ -432,14 +451,33 @@ app.post('/api/upload/document', uploadWithFilter.single('file'), async (req, re
 
       console.log('Generated tickets from Excel:', tickets.length)
       const parser = new DocumentParser()
+      const preview = parser.generateExcelPreview(rows, {
+        hasHeaderRow: true,
+        detectedColumns: Object.keys(columnIndices)
+      })
+
+      let diagrams = null
+      try {
+        diagrams = await diagramService.generateFromTickets(tickets, {
+          type: 'bpmn',
+          formats: ['svg', 'xml'],
+          diagramId: `excel_${Date.now()}`,
+          workforceMetadata: {
+            fileName: req.file.originalname,
+            source: 'excel-upload',
+            ticketCount: tickets.length
+          }
+        })
+      } catch (diagramError) {
+        console.warn('Diagram generation failed for Excel document:', diagramError.message)
+      }
+
       res.json({ 
         tickets,
         source: 'document',
         fileType: 'excel',
-        preview: parser.generateExcelPreview(rows, {
-          hasHeaderRow: true,
-          detectedColumns: Object.keys(columnIndices)
-        })
+        preview,
+        diagrams
       })
     }
   } catch (error) {
@@ -765,6 +803,43 @@ app.post('/api/jira/logout', (req, res) => {
       error: 'Failed to logout',
       details: error.message
     })
+  }
+})
+
+// Diagram rendering endpoint
+app.post('/api/diagrams/render', async (req, res) => {
+  try {
+    const { definition, formats } = req.body || {}
+    if (!definition || typeof definition !== 'string') {
+      return res.status(400).json({ error: 'Missing diagram definition' })
+    }
+
+    const diagram = await diagramService.renderDefinition(definition, formats)
+    res.json({ diagram })
+  } catch (error) {
+    console.error('Diagram render error:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+app.post('/api/diagrams/generate', async (req, res) => {
+  try {
+    const { tickets, type, formats, diagramId, workforceMetadata } = req.body || {}
+    if (!Array.isArray(tickets) || tickets.length === 0) {
+      return res.status(400).json({ error: 'Tickets array is required to generate diagram' })
+    }
+
+    const diagram = await diagramService.generateFromTickets(tickets, {
+      type,
+      formats,
+      diagramId,
+      workforceMetadata
+    })
+
+    res.json({ diagram })
+  } catch (error) {
+    console.error('Diagram generation error:', error)
+    res.status(500).json({ error: error.message })
   }
 })
 
