@@ -4,6 +4,32 @@ const FileUpload = ({ onFileSelect, onProcess, disabled, uploadedFile }) => {
   const [isDragOver, setIsDragOver] = useState(false)
   const fileInputRef = useRef(null)
 
+  const getFileType = (file) => {
+    if (file.name.endsWith('.xlsx')) return 'Excel'
+    if (file.name.endsWith('.docx')) return 'Word'
+    return 'Unknown'
+  }
+
+  const getFileIcon = (fileType) => {
+    if (fileType === 'Excel') {
+      return (
+        <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-8-6z" />
+          <path d="M8 9h8v2H8V9zm0 4h8v2H8v-2zm0 4h4v2H8v-2z" fillOpacity="0.3" />
+        </svg>
+      )
+    }
+    if (fileType === 'Word') {
+      return (
+        <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-8-6z" />
+          <text x="9" y="16" fontSize="8" fontWeight="bold" fill="currentColor">W</text>
+        </svg>
+      )
+    }
+    return null
+  }
+
   const handleDragOver = (e) => {
     e.preventDefault()
     setIsDragOver(true)
@@ -45,7 +71,7 @@ const FileUpload = ({ onFileSelect, onProcess, disabled, uploadedFile }) => {
   return (
     <div className="w-full">
       <label className="block text-sm font-medium text-slate-700 mb-3">
-        Excel fájl feltöltése
+        Fájl feltöltése (Excel vagy Word)
       </label>
 
       <div
@@ -64,7 +90,7 @@ const FileUpload = ({ onFileSelect, onProcess, disabled, uploadedFile }) => {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".xlsx"
+          accept=".xlsx,.docx"
           onChange={handleFileSelect}
           disabled={disabled}
           className="hidden"
@@ -89,10 +115,20 @@ const FileUpload = ({ onFileSelect, onProcess, disabled, uploadedFile }) => {
 
           <div className="text-base text-slate-600">
             {uploadedFile ? (
-              <div className="space-y-2">
-                <p className="text-green-600 font-semibold text-lg">
-                  ✓ Kiválasztva: {uploadedFile.name}
-                </p>
+              <div className="space-y-3">
+                <div className="flex items-center justify-center gap-3">
+                  <div className="w-8 h-8 text-blue-600">
+                    {getFileIcon(getFileType(uploadedFile))}
+                  </div>
+                  <div className="text-left">
+                    <p className="text-green-600 font-semibold">
+                      ✓ {uploadedFile.name}
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      {getFileType(uploadedFile)} fájl
+                    </p>
+                  </div>
+                </div>
                 <p className="text-sm text-slate-500">
                   Kattintson a feldolgozáshoz
                 </p>
@@ -100,9 +136,12 @@ const FileUpload = ({ onFileSelect, onProcess, disabled, uploadedFile }) => {
             ) : (
               <>
                 <p className="font-semibold text-lg text-slate-700">
-                  {isDragOver ? 'Engedje el az Excel fájlt itt' : 'Húzza ide az Excel fájlt'}
+                  {isDragOver ? 'Engedje el a fájlt itt' : 'Húzza ide az Excel vagy Word fájlt'}
                 </p>
                 <p className="text-slate-500">vagy kattintson a böngészéshez</p>
+                <p className="text-xs text-slate-400 mt-2">
+                  Támogatott formátumok: .xlsx, .docx
+                </p>
               </>
             )}
           </div>

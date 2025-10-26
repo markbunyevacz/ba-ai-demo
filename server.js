@@ -4,8 +4,15 @@ import multer from 'multer'
 import xlsx from 'xlsx'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import dotenv from 'dotenv'
 import GroundingService from './src/services/groundingService.js'
 import MonitoringService from './src/services/monitoringService.js'
+import JiraService from './src/services/jiraService.js'
+import SessionStore from './src/services/sessionStore.js'
+import DocumentParser from './src/services/documentParser.js'
+
+// Load environment variables
+dotenv.config()
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -23,6 +30,22 @@ app.use(express.static(path.join(__dirname, 'public')))
 // Configure multer for memory storage
 const upload = multer({ storage: multer.memoryStorage() })
 
+// Configure multer with file type filtering for Excel and Word
+const uploadWithFilter = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: (req, file, cb) => {
+    const allowed = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document' // .docx
+    ]
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true)
+    } else {
+      cb(new Error(`Invalid file type: ${file.mimetype}. Only .xlsx and .docx files are allowed.`))
+    }
+  }
+})
+
 // Priority mapping
 const priorityMap = {
   'Kritikus': 'Critical',
@@ -39,6 +62,31 @@ const groundingService = new GroundingService()
 
 // Initialize monitoring service
 const monitoringService = new MonitoringService()
+
+// Add session management for OAuth state tracking
+const oauthStates = new Map()
+
+// Helper function to generate and store OAuth state
+const generateOAuthState = () => {
+  const state = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
+  oauthStates.set(state, {
+    createdAt: Date.now(),
+    expires: Date.now() + 600000 // 10 minutes
+  })
+  return state
+}
+
+// Helper function to validate OAuth state
+const validateOAuthState = (state) => {
+  const stateData = oauthStates.get(state)
+  if (!stateData) return false
+  if (Date.now() > stateData.expires) {
+    oauthStates.delete(state)
+    return false
+  }
+  oauthStates.delete(state)
+  return true
+}
 
 // Routes
 app.post('/api/upload', upload.single('file'), (req, res) => {
@@ -214,6 +262,189 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
   }
 })
 
+// Document upload endpoint for Word files
+app.post('/api/upload/document', uploadWithFilter.single('file'), async (req, res) => {
+  // Track request start
+  const sessionId = monitoringService.trackRequest({
+    endpoint: '/api/upload/document',
+    fileSize: req.file?.size || 0,
+    fileName: req.file?.originalname || 'unknown'
+  })
+
+  try {
+    if (!req.file) {
+      monitoringService.trackCompletion(sessionId, { success: false, error: 'No file uploaded' })
+      return res.status(400).json({ error: 'No file uploaded' })
+    }
+
+    // Check file type
+    const isWordFile = req.file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+
+    if (isWordFile) {
+      console.log('Processing Word document:', req.file.originalname)
+      
+      const parser = new DocumentParser()
+      const plainText = await parser.parseWordDocument(req.file.buffer.buffer || req.file.buffer)
+      
+      console.log('Extracted text from Word document (first 500 chars):', plainText.substring(0, 500))
+
+      // Convert document content to tickets
+      const ticketStartId = Math.floor(Math.random() * 900) + 1001
+      const tickets = parser.convertToTickets(plainText, {
+        priority: 'Medium',
+        assignee: 'Unassigned',
+        epic: 'No Epic',
+        ticketPrefix: 'MVM',
+        ticketNumber: ticketStartId
+      })
+
+      // Apply grounding validation to each ticket
+      const groundedTickets = tickets.map((ticket, index) => {
+        const sourceData = { fileType: 'word', fileName: req.file.originalname, ticketIndex: index }
+        return groundingService.enhanceWithGrounding(ticket, sourceData)
+      })
+
+      // Track completion with monitoring
+      const averageConfidence = groundedTickets.length > 0 ? 
+        groundedTickets.reduce((sum, ticket) => sum + (ticket._grounding?.confidence || 0), 0) / groundedTickets.length : 0
+
+      monitoringService.trackCompletion(sessionId, {
+        success: true,
+        ticketsGenerated: groundedTickets.length,
+        averageConfidence,
+        fileType: 'word'
+      })
+
+      console.log('Generated tickets from Word document:', groundedTickets.length)
+      res.json({ 
+        tickets: groundedTickets,
+        source: 'document',
+        fileType: 'word'
+      })
+    } else {
+      // Handle Excel file (keep existing logic for backward compatibility)
+      console.log('Processing Excel file:', req.file.originalname)
+      
+      const workbook = xlsx.read(req.file.buffer, { type: 'buffer', cellText: false, cellDates: true })
+      const sheetName = workbook.SheetNames[0]
+      const worksheet = workbook.Sheets[sheetName]
+
+      const rows = xlsx.utils.sheet_to_json(worksheet, { header: 1, defval: '' })
+
+      if (!rows || rows.length < 2) {
+        return res.status(400).json({
+          error: 'Excel file is empty or has no data rows',
+          details: 'Please ensure your Excel file has a header row and at least one data row'
+        })
+      }
+
+      const headers = rows[0].map(h => String(h ?? '').trim())
+      const columnIndices = {}
+      
+      headers.forEach((header, index) => {
+        const normalized = String(header).toLowerCase().trim()
+        
+        if (normalized.includes('story')) {
+          columnIndices['User Story'] = index
+        }
+        if (normalized.includes('priority') || normalized.includes('prioritás')) {
+          columnIndices['Priority'] = index
+        }
+        if (normalized.includes('assignee') || normalized.includes('hozzárendelt')) {
+          columnIndices['Assignee'] = index
+        }
+        if (normalized.includes('epic')) {
+          columnIndices['Epic'] = index
+        }
+        if (normalized.includes('acceptance') || normalized.includes('criteria') || normalized.includes('kritérium')) {
+          columnIndices['Acceptance Criteria'] = index
+        }
+      })
+
+      if (columnIndices['User Story'] === undefined) {
+        return res.status(400).json({
+          error: 'Missing required column',
+          details: `Could not find "User Story" column. Found headers: ${headers.join(', ')}`
+        })
+      }
+
+      const dataRows = rows.slice(1)
+      const tickets = dataRows.map((row, index) => {
+        const safeRow = Array.isArray(row) ? row : []
+
+        const ticket = {
+          id: `MVM-${ticketCounter + index}`,
+          summary: 'Untitled',
+          description: '',
+          priority: 'Medium',
+          assignee: 'Unassigned',
+          epic: 'No Epic',
+          acceptanceCriteria: [],
+          createdAt: new Date().toISOString()
+        }
+
+        Object.entries(columnIndices).forEach(([colName, colIndex]) => {
+          const value = typeof colIndex === 'number' && colIndex >= 0 && colIndex < safeRow.length
+            ? String(safeRow[colIndex] ?? '').trim()
+            : ''
+
+          switch (colName) {
+            case 'User Story':
+              ticket.summary = value ? value.substring(0, 100) : 'Untitled'
+              ticket.description = value || ''
+              break
+            case 'Priority':
+              ticket.priority = priorityMap[value] || value || 'Medium'
+              break
+            case 'Assignee':
+              ticket.assignee = value || 'Unassigned'
+              break
+            case 'Epic':
+              ticket.epic = value || 'No Epic'
+              break
+            case 'Acceptance Criteria':
+              ticket.acceptanceCriteria = value
+                ? value.split(/\n|\\n|<br>|<br\/>|<br \/>/).map(c => c.trim()).filter(c => c)
+                : []
+              break
+          }
+        })
+
+        const sourceData = { rowIndex: index, originalRow: safeRow }
+        return groundingService.enhanceWithGrounding(ticket, sourceData)
+      }).filter(ticket => ticket.summary.trim() !== '')
+
+      ticketCounter += tickets.length
+
+      const averageConfidence = tickets.length > 0 ? 
+        tickets.reduce((sum, ticket) => sum + (ticket._grounding?.confidence || 0), 0) / tickets.length : 0
+
+      monitoringService.trackCompletion(sessionId, {
+        success: true,
+        ticketsGenerated: tickets.length,
+        averageConfidence,
+        fileType: 'excel'
+      })
+
+      console.log('Generated tickets from Excel:', tickets.length)
+      res.json({ 
+        tickets,
+        source: 'document',
+        fileType: 'excel'
+      })
+    }
+  } catch (error) {
+    console.error('Error processing document:', error)
+    
+    monitoringService.trackCompletion(sessionId, { 
+      success: false, 
+      error: error.message 
+    })
+    
+    res.status(500).json({ error: 'Failed to process document: ' + error.message })
+  }
+})
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({
@@ -332,6 +563,197 @@ app.get('/api/monitoring/export', (req, res) => {
   } catch (error) {
     res.status(500).json({
       error: 'Failed to export monitoring data',
+      details: error.message
+    })
+  }
+})
+
+// OAuth Routes
+app.get('/auth/jira', (req, res) => {
+  try {
+    const state = generateOAuthState()
+    const authUrl = JiraService.getAuthorizationURL(state)
+    res.redirect(authUrl)
+  } catch (error) {
+    console.error('Error initiating Jira OAuth:', error)
+    res.status(500).json({
+      error: 'Failed to initiate Jira authentication',
+      details: error.message
+    })
+  }
+})
+
+app.get('/auth/jira/callback', async (req, res) => {
+  try {
+    const { code, state, error, error_description } = req.query
+
+    // Check for OAuth errors
+    if (error) {
+      console.error('OAuth error:', error, error_description)
+      return res.status(400).json({
+        error: 'OAuth authentication failed',
+        details: error_description || error
+      })
+    }
+
+    // Validate state parameter
+    if (!validateOAuthState(state)) {
+      console.error('Invalid OAuth state')
+      return res.status(400).json({
+        error: 'Invalid OAuth state',
+        details: 'State parameter validation failed. Please try again.'
+      })
+    }
+
+    // Exchange code for access token
+    const tokenData = await JiraService.exchangeCodeForToken(code)
+
+    // Create user session and store token
+    const sessionId = SessionStore.createSession('jira-user')
+    SessionStore.setJiraToken(sessionId, tokenData)
+
+    // Store token in JiraService for immediate use
+    JiraService.setUserToken('jira-user', tokenData)
+
+    // Redirect to frontend with session info
+    const redirectUrl = `${req.protocol}://${req.get('host')}/?sessionId=${sessionId}&auth=success`
+    res.redirect(redirectUrl)
+  } catch (error) {
+    console.error('Error handling Jira OAuth callback:', error)
+    const errorRedirect = `${req.protocol}://${req.get('host')}/?auth=error&message=${encodeURIComponent(error.message)}`
+    res.redirect(errorRedirect)
+  }
+})
+
+// Jira API Endpoint - Create Tickets
+app.post('/api/jira/create-tickets', async (req, res) => {
+  try {
+    const { tickets, sessionId } = req.body
+
+    // Validate input
+    if (!tickets || !Array.isArray(tickets) || tickets.length === 0) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        details: 'Please provide an array of tickets to create'
+      })
+    }
+
+    if (!sessionId) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        details: 'No valid session found. Please authenticate with Jira first.',
+        authUrl: '/auth/jira'
+      })
+    }
+
+    // Validate session and get token
+    const session = SessionStore.getSession(sessionId)
+    if (!session || !SessionStore.isJiraTokenValid(sessionId)) {
+      return res.status(401).json({
+        error: 'Session expired or invalid',
+        details: 'Please authenticate with Jira again.',
+        authUrl: '/auth/jira'
+      })
+    }
+
+    const tokenData = SessionStore.getJiraToken(sessionId)
+    if (!tokenData) {
+      return res.status(401).json({
+        error: 'No Jira token found',
+        details: 'Please authenticate with Jira.',
+        authUrl: '/auth/jira'
+      })
+    }
+
+    console.log(`Creating ${tickets.length} Jira tickets...`)
+
+    // Create multiple issues in Jira
+    const result = await JiraService.createMultipleIssues(
+      tickets,
+      'jira-user',
+      tokenData.accessToken
+    )
+
+    // Track completion with monitoring
+    monitoringService.trackCompletion(Date.now().toString(), {
+      success: true,
+      operation: 'jira-ticket-creation',
+      ticketsCreated: result.successful,
+      ticketsFailed: result.failed,
+      totalTickets: result.total
+    })
+
+    res.json({
+      success: true,
+      message: `Successfully created ${result.successful} out of ${result.total} tickets`,
+      result: {
+        total: result.total,
+        successful: result.successful,
+        failed: result.failed,
+        tickets: result.results.map(r => ({
+          originalId: r.originalTicket.id,
+          jiraKey: r.issueKey,
+          jiraId: r.issueId,
+          status: 'created'
+        })),
+        errors: result.errors
+      }
+    })
+  } catch (error) {
+    console.error('Error creating Jira tickets:', error)
+    res.status(500).json({
+      error: 'Failed to create Jira tickets',
+      details: error.message,
+      authUrl: '/auth/jira'
+    })
+  }
+})
+
+// Jira Status Endpoint - Check authentication status
+app.get('/api/jira/status', (req, res) => {
+  try {
+    const { sessionId } = req.query
+
+    if (!sessionId) {
+      return res.json({
+        authenticated: false,
+        message: 'No session found'
+      })
+    }
+
+    const session = SessionStore.getSession(sessionId)
+    const isValid = session && SessionStore.isJiraTokenValid(sessionId)
+
+    res.json({
+      authenticated: isValid,
+      sessionId: isValid ? sessionId : null,
+      message: isValid ? 'Authenticated' : 'Session expired or invalid',
+      authUrl: isValid ? null : '/auth/jira'
+    })
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to check Jira status',
+      details: error.message
+    })
+  }
+})
+
+// Jira Logout Endpoint
+app.post('/api/jira/logout', (req, res) => {
+  try {
+    const { sessionId } = req.body
+
+    if (sessionId) {
+      SessionStore.deleteSession(sessionId)
+    }
+
+    res.json({
+      success: true,
+      message: 'Logged out successfully'
+    })
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to logout',
       details: error.message
     })
   }

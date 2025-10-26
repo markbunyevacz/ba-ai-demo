@@ -6,7 +6,8 @@
 import { 
   BUSINESS_RULES, 
   VALIDATION_PATTERNS, 
-  DOMAIN_KNOWLEDGE, 
+  DOMAIN_KNOWLEDGE,
+  STAKEHOLDER_ANALYSIS,
   QUALITY_METRICS, 
   ERROR_MESSAGES 
 } from '../config/knowledgeBase.js'
@@ -193,6 +194,242 @@ class GroundingService {
       },
       lastUpdated: new Date().toISOString()
     }
+  }
+
+  /**
+   * Validate extracted stakeholder data
+   * @param {Array} stakeholders - List of extracted stakeholders
+   * @returns {Object} Validation result
+   */
+  validateStakeholders(stakeholders) {
+    const validation = {
+      valid: true,
+      total: stakeholders.length,
+      issues: [],
+      warnings: [],
+      hallucinations: []
+    }
+
+    if (!stakeholders || stakeholders.length === 0) {
+      validation.warnings.push('No stakeholders extracted from tickets')
+      return validation
+    }
+
+    const hallucConfig = STAKEHOLDER_ANALYSIS.halluccinationDetection
+
+    stakeholders.forEach((stakeholder, index) => {
+      // Validate name
+      if (!stakeholder.name || stakeholder.name.trim().length === 0) {
+        validation.issues.push(`Stakeholder ${index}: Missing or empty name`)
+        validation.valid = false
+      }
+
+      // Validate name length
+      if (stakeholder.name.length < hallucConfig.minNameLength) {
+        validation.warnings.push(`Stakeholder ${stakeholder.name}: Name too short (possible abbreviation)`)
+      }
+      if (stakeholder.name.length > hallucConfig.maxNameLength) {
+        validation.issues.push(`Stakeholder ${stakeholder.name}: Name too long (likely extraction error)`)
+        validation.valid = false
+      }
+
+      // Validate power and interest levels
+      if (!STAKEHOLDER_ANALYSIS.powerLevels.includes(stakeholder.power)) {
+        validation.issues.push(`Stakeholder ${stakeholder.name}: Invalid power level '${stakeholder.power}'`)
+        validation.valid = false
+      }
+      if (!STAKEHOLDER_ANALYSIS.interestLevels.includes(stakeholder.interest)) {
+        validation.issues.push(`Stakeholder ${stakeholder.name}: Invalid interest level '${stakeholder.interest}'`)
+        validation.valid = false
+      }
+
+      // Validate mentions exist
+      if (!stakeholder.mentions || stakeholder.mentions.length === 0) {
+        validation.issues.push(`Stakeholder ${stakeholder.name}: No mentions found (likely hallucination)`)
+        validation.hallucinations.push({
+          name: stakeholder.name,
+          reason: 'No source mentions',
+          confidence: 0.95
+        })
+        validation.valid = false
+      }
+
+      // Check for generic names
+      if (hallucConfig.genericNames.includes(stakeholder.name)) {
+        validation.warnings.push(`Stakeholder ${stakeholder.name}: Generic name (verify in source data)`)
+      }
+
+      // Check confidence for single-mention stakeholders
+      if (stakeholder.frequency === 1 && (stakeholder.confidence || 0) < hallucConfig.minConfidenceForSingleMention) {
+        validation.hallucinations.push({
+          name: stakeholder.name,
+          reason: 'Single mention with low confidence',
+          confidence: 0.7,
+          frequency: stakeholder.frequency
+        })
+      }
+    })
+
+    return validation
+  }
+
+  /**
+   * Detect hallucinated stakeholders
+   * @param {Array} stakeholders - List of extracted stakeholders
+   * @param {Object} sourceData - Original source data
+   * @returns {Object} Hallucination detection results
+   */
+  detectStakeholderHallucinations(stakeholders, sourceData) {
+    const detection = {
+      hallucinations: [],
+      suspiciousPatterns: [],
+      warnings: [],
+      confidence: 0
+    }
+
+    if (!stakeholders || stakeholders.length === 0) {
+      return detection
+    }
+
+    const hallucConfig = STAKEHOLDER_ANALYSIS.halluccinationDetection
+    const genericNames = hallucConfig.genericNames
+
+    stakeholders.forEach(stakeholder => {
+      // Check for generic or fabricated names
+      if (genericNames.includes(stakeholder.name)) {
+        detection.hallucinations.push({
+          name: stakeholder.name,
+          type: 'generic_name',
+          reason: 'Generic name detected',
+          confidence: 0.6,
+          suggestion: 'Verify stakeholder identity in source data'
+        })
+      }
+
+      // Check for suspicious patterns
+      if (stakeholder.name.includes(',') || stakeholder.name.includes('@')) {
+        detection.suspiciousPatterns.push({
+          name: stakeholder.name,
+          pattern: 'Contains special characters',
+          confidence: 0.8,
+          suggestion: 'Likely extraction error - verify source'
+        })
+      }
+
+      // Check for multiple spaces
+      if (/\s{2,}/.test(stakeholder.name)) {
+        detection.suspiciousPatterns.push({
+          name: stakeholder.name,
+          pattern: 'Multiple consecutive spaces',
+          confidence: 0.6,
+          suggestion: 'May indicate parsing issue'
+        })
+      }
+
+      // Check for very high frequency without source attribution
+      if (stakeholder.frequency > 20 && (!stakeholder.mentions || stakeholder.mentions.length === 0)) {
+        detection.hallucinations.push({
+          name: stakeholder.name,
+          type: 'high_frequency_no_source',
+          reason: 'High frequency but no source mentions',
+          confidence: 0.85,
+          suggestion: 'May be fabricated aggregate'
+        })
+      }
+
+      // Check for low frequency (single mention)
+      if (stakeholder.frequency === 1 && (stakeholder.confidence || 0) < 0.6) {
+        detection.warnings.push({
+          name: stakeholder.name,
+          level: 'warning',
+          message: 'Single mention with low confidence',
+          confidence: 0.65,
+          suggestion: 'May be a misextraction - verify in source'
+        })
+      }
+
+      // Check for malformed email-like patterns
+      if (/@[A-Za-z]/.test(stakeholder.name) && !/@(domain|company|email)/.test(stakeholder.name.toLowerCase())) {
+        detection.suspiciousPatterns.push({
+          name: stakeholder.name,
+          pattern: 'Looks like email address',
+          confidence: 0.7,
+          suggestion: 'Extract actual name from email'
+        })
+      }
+
+      // Check context mismatch
+      if (stakeholder.type && stakeholder.mentions) {
+        const allContexts = stakeholder.mentions.map(m => m.context || '').join(' ').toLowerCase()
+        const type = stakeholder.type.toLowerCase()
+
+        // If type is "Executive" but mentions are about implementation, flag it
+        if (type.includes('executive') && (allContexts.includes('implement') || allContexts.includes('code') || allContexts.includes('debug'))) {
+          detection.hallucinations.push({
+            name: stakeholder.name,
+            type: 'context_mismatch',
+            reason: 'Stakeholder type contradicts context',
+            confidence: 0.7,
+            suggestion: `Expected ${stakeholder.type} role but context suggests technical implementation`
+          })
+        }
+      }
+    })
+
+    // Calculate overall hallucination confidence
+    detection.confidence = Math.min(
+      1.0,
+      (detection.hallucinations.length * 0.3 + detection.suspiciousPatterns.length * 0.2) / Math.max(stakeholders.length, 1)
+    )
+
+    return detection
+  }
+
+  /**
+   * Validate stakeholder power/interest matrix
+   * @param {Object} matrix - Power/interest matrix
+   * @returns {Object} Validation result
+   */
+  validateStakeholderMatrix(matrix) {
+    const validation = {
+      valid: true,
+      issues: [],
+      warnings: []
+    }
+
+    if (!matrix) {
+      validation.issues.push('Matrix data is missing')
+      validation.valid = false
+      return validation
+    }
+
+    // Validate structure
+    const requiredQuadrants = ['highPowerHighInterest', 'highPowerLowInterest', 'lowPowerHighInterest', 'lowPowerLowInterest']
+    requiredQuadrants.forEach(quadrant => {
+      if (!Array.isArray(matrix[quadrant])) {
+        validation.issues.push(`Missing or invalid quadrant: ${quadrant}`)
+        validation.valid = false
+      }
+    })
+
+    // Validate summary
+    if (matrix.summary) {
+      const total = matrix.summary.total || 0
+      const byQuadrant = matrix.summary.byQuadrant || {}
+      const sum = Object.values(byQuadrant).reduce((a, b) => a + b, 0)
+
+      if (sum !== total) {
+        validation.warnings.push(`Quadrant sum (${sum}) doesn't match total (${total})`)
+      }
+    }
+
+    // Validate stakeholder distribution
+    const totalStakeholders = Object.values(matrix).filter(Array.isArray).reduce((sum, arr) => sum + arr.length, 0)
+    if (totalStakeholders === 0) {
+      validation.warnings.push('Matrix contains no stakeholders')
+    }
+
+    return validation
   }
 }
 

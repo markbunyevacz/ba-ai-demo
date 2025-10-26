@@ -166,6 +166,123 @@ export const DOMAIN_KNOWLEDGE = {
     ]
   },
 
+  // Stakeholder Analysis Configuration
+  STAKEHOLDER_ANALYSIS: {
+    powerLevels: ['Low', 'Medium', 'High'],
+    interestLevels: ['Low', 'Medium', 'High'],
+    
+    // Extraction patterns for stakeholder identification
+    extractionPatterns: [
+      /assigned to[:\s]+([A-Za-z\s]+?)(?:[,.]|$)/gi,
+      /assignee[:\s]+([A-Za-z\s]+?)(?:[,.]|$)/gi,
+      /stakeholder[s]?[:\s]+([A-Za-z\s,&]+?)(?:[,.]|$)/gi,
+      /contact[:\s]+([A-Za-z\s]+?)(?:[,.]|$)/gi,
+      /mentioned by[:\s]+([A-Za-z\s]+?)(?:[,.]|$)/gi,
+      /owner[:\s]+([A-Za-z\s]+?)(?:[,.]|$)/gi,
+      /lead[:\s]+([A-Za-z\s]+?)(?:[,.]|$)/gi,
+      /manager[:\s]+([A-Za-z\s]+?)(?:[,.]|$)/gi,
+      /reporter[:\s]+([A-Za-z\s]+?)(?:[,.]|$)/gi,
+      /involving[:\s]+([A-Za-z\s,&]+?)(?:[,.]|$)/gi,
+      /team[:\s]+([A-Za-z\s,&]+?)(?:[,.]|$)/gi,
+      /department[:\s]+([A-Za-z\s,&]+?)(?:[,.]|$)/gi
+    ],
+    
+    // Role-based power/interest mapping
+    roleMapping: {
+      'Product Owner': { power: 'High', interest: 'High' },
+      'Business Analyst': { power: 'High', interest: 'High' },
+      'Project Manager': { power: 'High', interest: 'High' },
+      'Developer': { power: 'Medium', interest: 'High' },
+      'QA Engineer': { power: 'Medium', interest: 'High' },
+      'Tester': { power: 'Medium', interest: 'High' },
+      'End User': { power: 'Low', interest: 'High' },
+      'Customer': { power: 'Medium', interest: 'High' },
+      'Stakeholder': { power: 'Medium', interest: 'Medium' },
+      'Manager': { power: 'High', interest: 'Medium' },
+      'Executive': { power: 'High', interest: 'Medium' },
+      'Sponsor': { power: 'High', interest: 'High' }
+    },
+    
+    // Quadrant strategy definitions
+    quadrantStrategies: {
+      manage: {
+        title: 'Manage Closely',
+        description: 'High Power, High Interest',
+        strategies: [
+          'Involve in key decisions and planning',
+          'Regular updates and consultations',
+          'Address concerns proactively',
+          'Seek active participation'
+        ],
+        color: '#d4185d'
+      },
+      keep_satisfied: {
+        title: 'Keep Satisfied',
+        description: 'High Power, Low Interest',
+        strategies: [
+          'Regular updates with key information',
+          'Highlight outcomes and benefits',
+          'Avoid over-communication',
+          'Ensure expectations are clear'
+        ],
+        color: '#ff6600'
+      },
+      keep_informed: {
+        title: 'Keep Informed',
+        description: 'Low Power, High Interest',
+        strategies: [
+          'Provide regular updates',
+          'Include in relevant discussions',
+          'Share progress and milestones',
+          'Answer questions promptly'
+        ],
+        color: '#009900'
+      },
+      monitor: {
+        title: 'Monitor',
+        description: 'Low Power, Low Interest',
+        strategies: [
+          'General awareness only',
+          'Minimal communication',
+          'Watch for changes in interest/power',
+          'Provide information if requested'
+        ],
+        color: '#cccccc'
+      }
+    },
+    
+    // Keywords for power level detection
+    powerKeywords: {
+      high: ['decides', 'approves', 'authorizes', 'budget', 'executive', 'sponsor', 'owner', 'lead', 'manager'],
+      medium: ['implements', 'develops', 'designs', 'reviews', 'team lead', 'senior'],
+      low: ['executes', 'supports', 'assists', 'junior', 'intern']
+    },
+    
+    // Keywords for interest level detection
+    interestKeywords: {
+      high: ['critical', 'important', 'urgent', 'required', 'must', 'essential', 'dependent', 'directly', 'directly involved'],
+      medium: ['involved', 'contribute', 'support', 'helps', 'related', 'relevant'],
+      low: ['inform', 'notify', 'aware', 'optional', 'nice to have', 'future']
+    },
+    
+    // Hallucination detection rules
+    halluccinationDetection: {
+      minNameLength: 3,
+      maxNameLength: 50,
+      genericNames: ['User', 'Team', 'People', 'Group', 'Staff'],
+      suspiciousPatterns: [',', '@', '\\d{5,}'],
+      minConfidenceForSingleMention: 0.7
+    },
+    
+    // Network analysis settings
+    networkAnalysis: {
+      minEdgeWeight: 1,
+      topRelationships: 50,
+      topInfluencers: 10,
+      densityThreshold: 0.3
+    }
+  },
+
   // Technical knowledge
   TECHNICAL_CONTEXT: {
     programmingLanguages: [
