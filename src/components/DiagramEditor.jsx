@@ -9,14 +9,25 @@ const DiagramEditor = ({ initialDefinition, onRegenerate }) => {
   const [error, setError] = useState(null)
 
   useEffect(() => {
+    if (!initialDefinition) {
+      setSvgPreview(null)
+      return
+    }
     setDefinition(initialDefinition)
+    void generateSvg(initialDefinition)
   }, [initialDefinition])
 
-  const generateSvg = async () => {
+  const generateSvg = async (value = definition) => {
+    if (!value) {
+      setSvgPreview(null)
+      setError(null)
+      return
+    }
+
     setLoading(true)
     setError(null)
     try {
-      const diagram = await diagramClient.renderDefinition(definition, ['svg'])
+      const diagram = await diagramClient.renderDefinition(value, ['svg'])
       setSvgPreview(diagram.svg)
     } catch (err) {
       setError(err.message)
@@ -26,12 +37,10 @@ const DiagramEditor = ({ initialDefinition, onRegenerate }) => {
   }
 
   useEffect(() => {
-    generateSvg()
+    if (definition) {
+      void generateSvg(definition)
+    }
   }, [definition])
-
-  const handleBlur = () => {
-    void generateSvg()
-  }
 
   const handleRegenerate = async () => {
     if (!onRegenerate) return
@@ -52,7 +61,6 @@ const DiagramEditor = ({ initialDefinition, onRegenerate }) => {
         rows="20"
         value={definition}
         onChange={(e) => setDefinition(e.target.value)}
-        onBlur={handleBlur}
         placeholder="Mermaid definition (e.g., graph TD, A --> B, A --> C)"
       />
       <div className="flex gap-2">

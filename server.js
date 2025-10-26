@@ -289,7 +289,7 @@ app.post('/api/upload/document', uploadWithFilter.single('file'), async (req, re
       const structuredContent = await parser.extractStructuredContent(wordBuffer)
       const plainText = structuredContent.text || await parser.parseWordDocument(wordBuffer)
       const preview = parser.generateWordPreview(structuredContent)
-      
+
       console.log('Extracted text from Word document (first 500 chars):', plainText.substring(0, 500))
 
       // Convert document content to tickets
@@ -325,7 +325,7 @@ app.post('/api/upload/document', uploadWithFilter.single('file'), async (req, re
       try {
         diagrams = await diagramService.generateFromTickets(groundedTickets, {
           type: 'bpmn',
-          formats: ['svg', 'xml'],
+          formats: ['svg', 'xml', 'png'],
           diagramId: `word_${Date.now()}`,
           workforceMetadata: {
             fileName: req.file.originalname,
@@ -460,7 +460,7 @@ app.post('/api/upload/document', uploadWithFilter.single('file'), async (req, re
       try {
         diagrams = await diagramService.generateFromTickets(tickets, {
           type: 'bpmn',
-          formats: ['svg', 'xml'],
+          formats: ['svg', 'xml', 'png'],
           diagramId: `excel_${Date.now()}`,
           workforceMetadata: {
             fileName: req.file.originalname,
