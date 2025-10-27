@@ -2,6 +2,13 @@ import { useEffect, useState } from 'react'
 import PropTypes from 'prop-types'
 import diagramClient from '../services/diagramClient.js'
 
+export const normalizeDefinition = (value) => {
+  if (!value) return ''
+  return value.replace(/\s+/g, ' ').trim()
+}
+
+export const hasDefinitionChanged = (a, b) => normalizeDefinition(a) !== normalizeDefinition(b)
+
 const DiagramEditor = ({ initialDefinition, onRegenerate }) => {
   const [definition, setDefinition] = useState(initialDefinition)
   const [svgPreview, setSvgPreview] = useState(null)
@@ -13,12 +20,16 @@ const DiagramEditor = ({ initialDefinition, onRegenerate }) => {
       setSvgPreview(null)
       return
     }
-    setDefinition(initialDefinition)
-    void generateSvg(initialDefinition)
+
+    if (hasDefinitionChanged(definition, initialDefinition)) {
+      setDefinition(initialDefinition)
+      void generateSvg(initialDefinition)
+    }
   }, [initialDefinition])
 
   const generateSvg = async (value = definition) => {
-    if (!value) {
+    const normalized = normalizeDefinition(value)
+    if (!normalized) {
       setSvgPreview(null)
       setError(null)
       return
@@ -27,7 +38,7 @@ const DiagramEditor = ({ initialDefinition, onRegenerate }) => {
     setLoading(true)
     setError(null)
     try {
-      const diagram = await diagramClient.renderDefinition(value, ['svg'])
+      const diagram = await diagramClient.renderDefinition(normalized, ['svg'])
       setSvgPreview(diagram.svg)
     } catch (err) {
       setError(err.message)
@@ -46,7 +57,7 @@ const DiagramEditor = ({ initialDefinition, onRegenerate }) => {
     if (!onRegenerate) return
     try {
       const regenerated = await onRegenerate(definition)
-      if (regenerated?.definition) {
+      if (regenerated?.definition && hasDefinitionChanged(regenerated.definition, definition)) {
         setDefinition(regenerated.definition)
       }
     } catch (err) {
@@ -65,7 +76,7 @@ const DiagramEditor = ({ initialDefinition, onRegenerate }) => {
       />
       <div className="flex gap-2">
         <button
-          onClick={generateSvg}
+          onClick={() => generateSvg(definition)}
           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
           disabled={loading}
         >

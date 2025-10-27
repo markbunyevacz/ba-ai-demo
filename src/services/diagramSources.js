@@ -4,7 +4,7 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 
 async function createMermaidRenderer() {
-  const module = await import('@mermaid-js/mermaid-cli/src/index.js')
+  const module = await import('@mermaid-js/mermaid-cli')
   const renderMermaid = module.renderMermaid || module.default?.renderMermaid
 
   if (!renderMermaid) {

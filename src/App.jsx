@@ -11,7 +11,7 @@ import DocumentPreview from './components/DocumentPreview'
 import bpmnService from './services/bpmnService'
 import stakeholderService from './services/stakeholderService'
 import groundingService from './services/groundingService'
-import monitoringService from './services/monitoringServiceInstance'
+import monitoringService from './services/monitoringService'
 import diagramClient from './services/diagramClient'
 
 function App() {
@@ -532,4 +532,55 @@ function App() {
                       <div className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">
                         {ticket.id}
                       </div>
-                      <div className={`
+                      <div className={`flex items-center space-x-2 px-3 py-1 text-xs font-medium rounded-full border ${
+                        ticket.status?.toLowerCase() === 'blocked'
+                          ? 'border-red-200 bg-red-50 text-red-700'
+                          : 'border-green-200 bg-green-50 text-green-700'
+                      }`}>
+                        {ticket.status}
+                      </div>
+                    </div>
+                    <p className="text-gray-800 mb-2">{ticket.summary}</p>
+                    <p className="text-sm text-gray-600">
+                      <span className="font-semibold">Leírás:</span> {ticket.description}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      <span className="font-semibold">Kategória:</span> {ticket.category}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      <span className="font-semibold">Prioritás:</span> {ticket.priority}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      <span className="font-semibold">Szállító:</span> {ticket.vendor}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      <span className="font-semibold">Határidő:</span> {ticket.dueDate}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      <span className="font-semibold">Költség:</span> {ticket.cost}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      <span className="font-semibold">Szerző:</span> {ticket.author}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      <span className="font-semibold">Létrehozva:</span> {ticket.createdAt}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      <span className="font-semibold">Frissítve:</span> {ticket.updatedAt}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </main>
+      
+      <footer className="bg-gray-800 text-white p-4 sm:p-6 text-center">
+        <p>&copy; 2023 BA AI Asszisztens. Minden jog fenntartva.</p>
+      </footer>
+    </div>
+  )
+}
+
+export default App
