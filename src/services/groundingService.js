@@ -75,8 +75,8 @@ class GroundingService {
     }
 
     // Validate summary length
-    const summaryRules = this.validationRules.get('summary_length')
-    if (ticket.summary.length < summaryRules.min || ticket.summary.length > summaryRules.max) {
+    const summaryRules = this.validationRules.get('summary') || BUSINESS_RULES.CONTENT_RULES.summary
+    if (ticket.summary.length < summaryRules.minLength || ticket.summary.length > summaryRules.maxLength) {
       validation.issues.push(`Summary length invalid: ${ticket.summary.length} chars`)
       validation.confidence -= 0.1
     }

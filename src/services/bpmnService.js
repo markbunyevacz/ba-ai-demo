@@ -1,4 +1,4 @@
-import { DOMAIN_KNOWLEDGE } from '../config/knowledgeBase'
+import { DOMAIN_KNOWLEDGE } from '../config/knowledgeBase.js'
 
 /**
  * BPMN Service

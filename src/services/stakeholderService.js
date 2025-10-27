@@ -1,4 +1,4 @@
-import { DOMAIN_KNOWLEDGE, BUSINESS_RULES } from '../config/knowledgeBase'
+import { DOMAIN_KNOWLEDGE, BUSINESS_RULES } from '../config/knowledgeBase.js'
 
 const POWER_SCORES = { Low: 1, Medium: 2, High: 3 }
 

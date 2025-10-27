@@ -1,6 +1,6 @@
 import axios from 'axios'
 import rateLimit from 'axios-rate-limit'
-import monitoringService from './monitoringServiceInstance.js'
+import monitoringService from './monitoringService.js'
 
 class JiraService {
   constructor() {
@@ -180,7 +180,7 @@ class JiraService {
           const start = Date.now()
           const response = await this.http(config)
 
-          this.monitoringService.trackJiraApiCall({
+          monitoringService.trackJiraApiCall({
             endpoint,
             method,
             status: response.status,
@@ -193,7 +193,7 @@ class JiraService {
           const status = error.response?.status
           const shouldRetry = retry && attempt < maxAttempts && retryStatusCodes.includes(status)
 
-          this.monitoringService.trackJiraApiCall({
+          monitoringService.trackJiraApiCall({
             endpoint,
             method,
             status,

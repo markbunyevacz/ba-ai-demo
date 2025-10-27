@@ -14,6 +14,7 @@
   "dependencies": {
     "@mermaid-js/mermaid-cli": "^11.12.0",
     "axios": "^1.6.0",
+    "axios-rate-limit": "^1.4.0",
     "bpmn-js": "^14.0.0",
     "cors": "^2.8.5",
     "diagram-js": "^12.0.0",
