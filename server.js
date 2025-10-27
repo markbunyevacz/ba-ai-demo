@@ -348,137 +348,151 @@ app.post('/api/upload/document', uploadWithFilter.single('file'), async (req, re
       // Handle Excel file (keep existing logic for backward compatibility)
       console.log('Processing Excel file:', req.file.originalname)
       
-      const workbook = xlsx.read(req.file.buffer, { type: 'buffer', cellText: false, cellDates: true })
-      const sheetName = workbook.SheetNames[0]
-      const worksheet = workbook.Sheets[sheetName]
-
-      const rows = xlsx.utils.sheet_to_json(worksheet, { header: 1, defval: '' })
-
-      if (!rows || rows.length < 2) {
-        return res.status(400).json({
-          error: 'Excel file is empty or has no data rows',
-          details: 'Please ensure your Excel file has a header row and at least one data row'
-        })
-      }
-
-      const headers = rows[0].map(h => String(h ?? '').trim())
-      const columnIndices = {}
-      
-      headers.forEach((header, index) => {
-        const normalized = String(header).toLowerCase().trim()
-        
-        if (normalized.includes('story')) {
-          columnIndices['User Story'] = index
-        }
-        if (normalized.includes('priority') || normalized.includes('prioritás')) {
-          columnIndices['Priority'] = index
-        }
-        if (normalized.includes('assignee') || normalized.includes('hozzárendelt')) {
-          columnIndices['Assignee'] = index
-        }
-        if (normalized.includes('epic')) {
-          columnIndices['Epic'] = index
-        }
-        if (normalized.includes('acceptance') || normalized.includes('criteria') || normalized.includes('kritérium')) {
-          columnIndices['Acceptance Criteria'] = index
-        }
-      })
-
-      if (columnIndices['User Story'] === undefined) {
-        return res.status(400).json({
-          error: 'Missing required column',
-          details: `Could not find "User Story" column. Found headers: ${headers.join(', ')}`
-        })
-      }
-
-      const dataRows = rows.slice(1)
-      const tickets = dataRows.map((row, index) => {
-        const safeRow = Array.isArray(row) ? row : []
-
-        const ticket = {
-          id: `MVM-${ticketCounter + index}`,
-          summary: 'Untitled',
-          description: '',
-          priority: 'Medium',
-          assignee: 'Unassigned',
-          epic: 'No Epic',
-          acceptanceCriteria: [],
-          createdAt: new Date().toISOString()
-        }
-
-        Object.entries(columnIndices).forEach(([colName, colIndex]) => {
-          const value = typeof colIndex === 'number' && colIndex >= 0 && colIndex < safeRow.length
-            ? String(safeRow[colIndex] ?? '').trim()
-            : ''
-
-          switch (colName) {
-            case 'User Story':
-              ticket.summary = value ? value.substring(0, 100) : 'Untitled'
-              ticket.description = value || ''
-              break
-            case 'Priority':
-              ticket.priority = priorityMap[value] || value || 'Medium'
-              break
-            case 'Assignee':
-              ticket.assignee = value || 'Unassigned'
-              break
-            case 'Epic':
-              ticket.epic = value || 'No Epic'
-              break
-            case 'Acceptance Criteria':
-              ticket.acceptanceCriteria = value
-                ? value.split(/\n|\\n|<br>|<br\/>|<br \/>/).map(c => c.trim()).filter(c => c)
-                : []
-              break
-          }
-        })
-
-        const sourceData = { rowIndex: index, originalRow: safeRow }
-        return groundingService.enhanceWithGrounding(ticket, sourceData)
-      }).filter(ticket => ticket.summary.trim() !== '')
-
-      ticketCounter += tickets.length
-
-      const averageConfidence = tickets.length > 0 ? 
-        tickets.reduce((sum, ticket) => sum + (ticket._grounding?.confidence || 0), 0) / tickets.length : 0
-
-      monitoringService.trackCompletion(sessionId, {
-        success: true,
-        ticketsGenerated: tickets.length,
-        averageConfidence,
-        fileType: 'excel'
-      })
-
-      console.log('Generated tickets from Excel:', tickets.length)
-      const parser = new DocumentParser()
-      const preview = parser.generateExcelPreview(rows, {
-        hasHeaderRow: true,
-        detectedColumns: Object.keys(columnIndices)
-      })
-
-      let diagrams = null
       try {
-        diagrams = await diagramService.generateFromTickets(tickets, {
-          type: 'bpmn',
-          formats: ['svg', 'xml', 'png'],
-          diagramId: `excel_${Date.now()}`,
-          workforceMetadata: {
-            fileName: req.file.originalname,
-            source: 'excel-upload',
-            ticketCount: tickets.length
+        const workbook = xlsx.read(req.file.buffer, { type: 'buffer', cellText: false, cellDates: true })
+        const sheetName = workbook.SheetNames[0]
+        const worksheet = workbook.Sheets[sheetName]
+
+        const rows = xlsx.utils.sheet_to_json(worksheet, { header: 1, defval: '' })
+
+        if (!rows || rows.length < 2) {
+          return res.status(400).json({
+            error: 'Excel file is empty or has no data rows',
+            details: 'Please ensure your Excel file has a header row and at least one data row'
+          })
+        }
+
+        const headers = rows[0].map(h => String(h ?? '').trim())
+        const columnIndices = {}
+        
+        headers.forEach((header, index) => {
+          const normalized = String(header).toLowerCase().trim()
+          
+          if (normalized.includes('story')) {
+            columnIndices['User Story'] = index
+          }
+          if (normalized.includes('priority') || normalized.includes('prioritás')) {
+            columnIndices['Priority'] = index
+          }
+          if (normalized.includes('assignee') || normalized.includes('hozzárendelt')) {
+            columnIndices['Assignee'] = index
+          }
+          if (normalized.includes('epic')) {
+            columnIndices['Epic'] = index
+          }
+          if (normalized.includes('acceptance') || normalized.includes('criteria') || normalized.includes('kritérium')) {
+            columnIndices['Acceptance Criteria'] = index
           }
         })
-      } catch (diagramError) {
-        console.warn('Diagram generation failed for Excel document:', diagramError.message)
-      }
 
-      res.json({ 
-        tickets,
-        source: 'document',
-        fileType: 'excel',
-        preview,
-        diagrams
-      })
+        if (columnIndices['User Story'] === undefined) {
+          return res.status(400).json({
+            error: 'Missing required column',
+            details: `Could not find "User Story" column. Found headers: ${headers.join(', ')}`
+          })
+        }
+
+        const dataRows = rows.slice(1)
+        const tickets = dataRows.map((row, index) => {
+          const safeRow = Array.isArray(row) ? row : []
+
+          const ticket = {
+            id: `MVM-${ticketCounter + index}`,
+            summary: 'Untitled',
+            description: '',
+            priority: 'Medium',
+            assignee: 'Unassigned',
+            epic: 'No Epic',
+            acceptanceCriteria: [],
+            createdAt: new Date().toISOString()
+          }
+
+          Object.entries(columnIndices).forEach(([colName, colIndex]) => {
+            const value = typeof colIndex === 'number' && colIndex >= 0 && colIndex < safeRow.length
+              ? String(safeRow[colIndex] ?? '').trim()
+              : ''
+
+            switch (colName) {
+              case 'User Story':
+                ticket.summary = value ? value.substring(0, 100) : 'Untitled'
+                ticket.description = value || ''
+                break
+              case 'Priority':
+                ticket.priority = priorityMap[value] || value || 'Medium'
+                break
+              case 'Assignee':
+                ticket.assignee = value || 'Unassigned'
+                break
+              case 'Epic':
+                ticket.epic = value || 'No Epic'
+                break
+              case 'Acceptance Criteria':
+                ticket.acceptanceCriteria = value
+                  ? value.split(/\n|\\n|<br>|<br\/>|<br \/>/).map(c => c.trim()).filter(c => c)
+                  : []
+                break
+            }
+          })
+
+          const sourceData = { rowIndex: index, originalRow: safeRow }
+          return groundingService.enhanceWithGrounding(ticket, sourceData)
+        }).filter(ticket => ticket.summary.trim() !== '')
+
+        ticketCounter += tickets.length
+
+        const averageConfidence = tickets.length > 0 ? 
+          tickets.reduce((sum, ticket) => sum + (ticket._grounding?.confidence || 0), 0) / tickets.length : 0
+
+        monitoringService.trackCompletion(sessionId, {
+          success: true,
+          ticketsGenerated: tickets.length,
+          averageConfidence,
+          fileType: 'excel'
+        })
+
+        console.log('Generated tickets from Excel:', tickets.length)
+        const parser = new DocumentParser()
+        const preview = parser.generateExcelPreview(rows, {
+          hasHeaderRow: true,
+          detectedColumns: Object.keys(columnIndices)
+        })
+
+        let diagrams = null
+        try {
+          diagrams = await diagramService.generateFromTickets(tickets, {
+            type: 'bpmn',
+            formats: ['svg', 'xml', 'png'],
+            diagramId: `excel_${Date.now()}`,
+            workforceMetadata: {
+              fileName: req.file.originalname,
+              source: 'excel-upload',
+              ticketCount: tickets.length
+            }
+          })
+        } catch (diagramError) {
+          console.warn('Diagram generation failed for Excel document:', diagramError.message)
+        }
+
+        res.json({ 
+          tickets,
+          source: 'document',
+          fileType: 'excel',
+          preview,
+          diagrams
+        })
+      } catch (excelError) {
+        console.error('Error parsing Excel file:', excelError)
+        monitoringService.trackCompletion(sessionId, { 
+          success: false, 
+          error: `Excel parsing error: ${excelError.message}` 
+        })
+        
+        return res.status(400).json({
+          error: 'Failed to parse Excel file',
+          details: excelError.message || 'The Excel file appears to be corrupted or in an unsupported format',
+          type: excelError.name
+        })
+      }
     }
   } catch (error) {
     console.error('Error processing document:', error)
@@ -852,11 +866,26 @@ app.use((error, req, res, next) => {
         details: 'Please upload a file smaller than 10MB'
       })
     }
+    // Handle other Multer errors
+    return res.status(400).json({
+      error: 'File upload error',
+      details: error.message
+    })
   }
 
-  res.status(400).json({
-    error: error.message,
-    details: 'Please check your file format and try again'
+  if (error.message && error.message.includes('Invalid file type')) {
+    return res.status(400).json({
+      error: 'Invalid file type',
+      details: error.message
+    })
+  }
+
+  console.error('Unhandled error:', error)
+  
+  res.status(500).json({
+    error: 'Internal server error',
+    details: error.message || 'An unexpected error occurred',
+    timestamp: new Date().toISOString()
   })
 })
 

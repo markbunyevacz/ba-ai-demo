@@ -166,15 +166,70 @@ function App() {
       formData.append('file', uploadedFile)
 
       // Use the new /api/upload/document endpoint that supports both Excel and Word
-      const response = await fetch('/api/upload/document', {
-        method: 'POST',
-        body: formData
-      })
+      let response
+      try {
+        response = await fetch('/api/upload/document', {
+          method: 'POST',
+          body: formData
+        })
+      } catch (fetchError) {
+        // Network error - server not running or connection refused
+        console.error('Network error:', fetchError)
+        throw new Error(
+          `A szerver nem érhető el. Kérjük, ellenőrizze, hogy a backend fut-e. Hiba: ${fetchError.message}`
+        )
+      }
 
-      const data = await response.json()
+      // Check if response is valid
+      if (!response) {
+        throw new Error('Nincs válasz a szervertől')
+      }
+
+      // Check content-type to ensure we have JSON
+      const contentType = response.headers.get('content-type')
+      let data
+      
+      if (!contentType || !contentType.includes('application/json')) {
+        // Not JSON response - might be HTML error page or no content
+        const text = await response.text()
+        
+        if (!text || text.trim() === '') {
+          throw new Error(
+            `Üres válasz a szervertől (${response.status}). A szerver nem fut vagy hibát adott vissza.`
+          )
+        }
+        
+        // Try to parse as JSON anyway
+        try {
+          data = JSON.parse(text)
+        } catch (parseError) {
+          console.error('Response text:', text.substring(0, 500))
+          throw new Error(
+            `Érvénytelen válasz a szervertől: ${text.substring(0, 200)}`
+          )
+        }
+      } else {
+        // Parse JSON response
+        try {
+          data = await response.json()
+        } catch (parseError) {
+          console.error('JSON parse error:', parseError)
+          throw new Error(
+            `Nem sikerült feldolgozni a szerver válaszát: ${parseError.message}`
+          )
+        }
+      }
 
       if (!response.ok) {
-        throw new Error(data.error || 'Hiba történt a feldolgozás során')
+        throw new Error(data.error || data.message || `Szerver hiba: ${response.status}`)
+      }
+
+      // Validate that we have the expected data
+      if (!data.tickets || !Array.isArray(data.tickets)) {
+        console.error('Invalid response structure:', data)
+        throw new Error(
+          'Érvénytelen válasz szerkezet: hiányzó vagy érvénytelen ticketlista'
+        )
       }
 
       // Wait for ProgressBar animation to complete (3 seconds)
