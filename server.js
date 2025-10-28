@@ -284,66 +284,99 @@ app.post('/api/upload/document', uploadWithFilter.single('file'), async (req, re
     if (isWordFile) {
       console.log('Processing Word document:', req.file.originalname)
       
-      const parser = new DocumentParser()
-      const wordBuffer = req.file.buffer.buffer || req.file.buffer
-      const structuredContent = await parser.extractStructuredContent(wordBuffer)
-      const plainText = structuredContent.text || await parser.parseWordDocument(wordBuffer)
-      const preview = parser.generateWordPreview(structuredContent)
-
-      console.log('Extracted text from Word document (first 500 chars):', plainText.substring(0, 500))
-
-      // Convert document content to tickets
-      const ticketStartId = Math.floor(Math.random() * 900) + 1001
-      const tickets = parser.convertToTickets(plainText, {
-        priority: 'Medium',
-        assignee: 'Unassigned',
-        epic: 'No Epic',
-        ticketPrefix: 'MVM',
-        ticketNumber: ticketStartId
+      // Extract AI provider and model from request body (sent from UI)
+      const aiProvider = req.body.aiProvider || process.env.AI_PROVIDER || 'openai'
+      const aiModel = req.body.aiModel || null // Let service choose default
+      
+      console.log(`AI Configuration: Provider=${aiProvider}, Model=${aiModel || 'default'}`)
+      
+      const parser = new DocumentParser({
+        provider: aiProvider,
+        model: aiModel
       })
-
-      // Apply grounding validation to each ticket
-      const groundedTickets = tickets.map((ticket, index) => {
-        const sourceData = { fileType: 'word', fileName: req.file.originalname, ticketIndex: index }
-        return groundingService.enhanceWithGrounding(ticket, sourceData)
-      })
-
-      // Track completion with monitoring
-      const averageConfidence = groundedTickets.length > 0 ? 
-        groundedTickets.reduce((sum, ticket) => sum + (ticket._grounding?.confidence || 0), 0) / groundedTickets.length : 0
-
-      monitoringService.trackCompletion(sessionId, {
-        success: true,
-        ticketsGenerated: groundedTickets.length,
-        averageConfidence,
-        fileType: 'word'
-      })
-
-      console.log('Generated tickets from Word document:', groundedTickets.length)
-
-      let diagrams = null
+      
+      // Ensure we have a proper ArrayBuffer for mammoth
+      const wordBuffer = Buffer.isBuffer(req.file.buffer) 
+        ? req.file.buffer.buffer.slice(req.file.buffer.byteOffset, req.file.buffer.byteOffset + req.file.buffer.byteLength)
+        : req.file.buffer
+      
       try {
-        diagrams = await diagramService.generateFromTickets(groundedTickets, {
-          type: 'bpmn',
-          formats: ['svg', 'xml', 'png'],
-          diagramId: `word_${Date.now()}`,
-          workforceMetadata: {
-            fileName: req.file.originalname,
-            source: 'word-upload',
-            ticketCount: groundedTickets.length
-          }
-        })
-      } catch (diagramError) {
-        console.warn('Diagram generation failed for Word document:', diagramError.message)
-      }
+        const structuredContent = await parser.extractStructuredContent(wordBuffer)
+        const plainText = structuredContent.text || await parser.parseWordDocument(wordBuffer)
+        const preview = parser.generateWordPreview(structuredContent)
 
-      res.json({ 
-        tickets: groundedTickets,
-        source: 'document',
-        fileType: 'word',
-        preview,
-        diagrams
-      })
+        console.log('Extracted text from Word document (first 500 chars):', plainText.substring(0, 500))
+
+        // Convert document content to tickets using AI analysis
+        const ticketStartId = Math.floor(Math.random() * 900) + 1001
+        const analysisResult = await parser.analyzeWithAI(plainText, {
+          priority: 'Medium',
+          assignee: 'Unassigned',
+          ticketPrefix: 'MVM',
+          ticketNumber: ticketStartId
+        })
+
+        const tickets = analysisResult.tickets
+        const epics = analysisResult.epics
+        const processFlow = analysisResult.processFlow
+        const strategicInsights = analysisResult.strategicInsights
+        const aiMetadata = analysisResult.metadata
+
+        // Apply grounding validation to each ticket
+        const groundedTickets = tickets.map((ticket, index) => {
+          const sourceData = { fileType: 'word', fileName: req.file.originalname, ticketIndex: index }
+          return groundingService.enhanceWithGrounding(ticket, sourceData)
+        })
+
+        // Track completion with monitoring
+        const averageConfidence = groundedTickets.length > 0 ? 
+          groundedTickets.reduce((sum, ticket) => sum + (ticket._grounding?.confidence || 0), 0) / groundedTickets.length : 0
+
+        monitoringService.trackCompletion(sessionId, {
+          success: true,
+          ticketsGenerated: groundedTickets.length,
+          averageConfidence,
+          fileType: 'word'
+        })
+
+        console.log('Generated tickets from Word document:', groundedTickets.length)
+
+        let diagrams = null
+        try {
+          diagrams = await diagramService.generateFromTickets(groundedTickets, {
+            type: 'bpmn',
+            formats: ['svg', 'xml', 'png'],
+            diagramId: `word_${Date.now()}`,
+            workforceMetadata: {
+              fileName: req.file.originalname,
+              source: 'word-upload',
+              ticketCount: groundedTickets.length
+            }
+          })
+        } catch (diagramError) {
+          console.warn('Diagram generation failed for Word document:', diagramError.message)
+        }
+
+        res.json({ 
+          tickets: groundedTickets,
+          source: 'document',
+          fileType: 'word',
+          preview,
+          diagrams,
+          // AI analysis results
+          epics: epics || [],
+          processFlow: processFlow || null,
+          strategicInsights: strategicInsights || null,
+          aiMetadata: aiMetadata || { aiPowered: false }
+        })
+      } catch (wordParseError) {
+        console.error('Word document parsing error:', wordParseError.message)
+        monitoringService.trackCompletion(sessionId, { success: false, error: wordParseError.message })
+        return res.status(400).json({
+          error: 'Failed to parse Word document',
+          details: wordParseError.message
+        })
+      }
     } else {
       // Handle Excel file (keep existing logic for backward compatibility)
       console.log('Processing Excel file:', req.file.originalname)
@@ -911,6 +944,122 @@ app.get('/', (req, res) => {
 })
 
 // 404 handler - must be last
+// AI Models endpoint - returns available models
+app.get('/api/ai/models', (req, res) => {
+  const models = {
+    openai: [
+      { 
+        id: 'gpt-4-turbo-preview', 
+        name: 'GPT-4 Turbo', 
+        provider: 'OpenAI',
+        cost: '$0.03/1K tokens',
+        speed: 'Medium',
+        quality: 'Excellent',
+        recommended: true
+      },
+      { 
+        id: 'gpt-4', 
+        name: 'GPT-4', 
+        provider: 'OpenAI',
+        cost: '$0.03/1K tokens',
+        speed: 'Slow',
+        quality: 'Excellent'
+      },
+      { 
+        id: 'gpt-3.5-turbo', 
+        name: 'GPT-3.5 Turbo', 
+        provider: 'OpenAI',
+        cost: '$0.002/1K tokens',
+        speed: 'Fast',
+        quality: 'Good',
+        budget: true
+      }
+    ],
+    openrouter: [
+      { 
+        id: 'openai/gpt-4-turbo-preview', 
+        name: 'GPT-4 Turbo (OpenRouter)', 
+        provider: 'OpenAI via OpenRouter',
+        cost: '$0.03/1K tokens',
+        speed: 'Medium',
+        quality: 'Excellent'
+      },
+      { 
+        id: 'openai/gpt-3.5-turbo', 
+        name: 'GPT-3.5 Turbo (OpenRouter)', 
+        provider: 'OpenAI via OpenRouter',
+        cost: '$0.002/1K tokens',
+        speed: 'Fast',
+        quality: 'Good',
+        budget: true,
+        recommended: true
+      },
+      { 
+        id: 'anthropic/claude-3-opus', 
+        name: 'Claude 3 Opus', 
+        provider: 'Anthropic',
+        cost: '$0.075/1K tokens',
+        speed: 'Medium',
+        quality: 'Excellent',
+        premium: true
+      },
+      { 
+        id: 'anthropic/claude-3-sonnet', 
+        name: 'Claude 3 Sonnet', 
+        provider: 'Anthropic',
+        cost: '$0.015/1K tokens',
+        speed: 'Fast',
+        quality: 'Very Good'
+      },
+      { 
+        id: 'anthropic/claude-3-haiku', 
+        name: 'Claude 3 Haiku', 
+        provider: 'Anthropic',
+        cost: '$0.001/1K tokens',
+        speed: 'Very Fast',
+        quality: 'Good',
+        budget: true
+      },
+      { 
+        id: 'meta-llama/llama-3-70b-instruct', 
+        name: 'Llama 3 70B', 
+        provider: 'Meta',
+        cost: '$0.0009/1K tokens',
+        speed: 'Fast',
+        quality: 'Good',
+        budget: true
+      },
+      { 
+        id: 'google/gemini-pro-1.5', 
+        name: 'Gemini Pro 1.5', 
+        provider: 'Google',
+        cost: '$0.005/1K tokens',
+        speed: 'Fast',
+        quality: 'Very Good'
+      }
+    ]
+  }
+  
+  const defaultProvider = process.env.AI_PROVIDER || 'openai'
+  const hasOpenAI = !!process.env.OPENAI_API_KEY
+  const hasOpenRouter = !!process.env.OPENROUTER_API_KEY
+  
+  res.json({
+    models,
+    defaultProvider,
+    providers: {
+      openai: {
+        available: hasOpenAI,
+        configured: hasOpenAI
+      },
+      openrouter: {
+        available: hasOpenRouter,
+        configured: hasOpenRouter
+      }
+    }
+  })
+})
+
 app.use((req, res) => {
   res.status(404).json({
     error: 'Route not found',
