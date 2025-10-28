@@ -75,9 +75,14 @@ function handleFileDrop(event) {
 // Validate and set selected file
 function validateAndSetFile(file) {
     // Check file type
-    const allowedTypes = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'];
+    const allowedTypes = [
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/msword'
+    ];
     if (!allowedTypes.includes(file.type)) {
-        showError('Csak Excel fájlok (.xlsx, .xls) tölthetők fel!');
+        showError('Csak Excel (.xlsx, .xls) vagy Word (.docx) fájlok tölthetők fel!');
         return;
     }
 
@@ -125,7 +130,7 @@ async function handleUpload() {
         const formData = new FormData();
         formData.append('file', selectedFile);
 
-        const response = await fetch('/api/upload', {
+        const response = await fetch('/api/upload/document', {
             method: 'POST',
             body: formData
         });
@@ -157,7 +162,7 @@ function showLoading() {
     uploadArea.innerHTML = `
         <div class="loading">
             <div class="spinner"></div>
-            <p>Excel fájl feldolgozása...</p>
+            <p>Dokumentum feldolgozása...</p>
         </div>
     `;
 }

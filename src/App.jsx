@@ -8,6 +8,7 @@ import BPMNViewer from './components/BPMNViewer'
 import FlowchartGenerator from './components/FlowchartGenerator'
 import DiagramViewer from './components/DiagramViewer'
 import DocumentPreview from './components/DocumentPreview'
+import ModelSelector from './components/ModelSelector'
 import bpmnService from './services/bpmnService'
 import stakeholderService from './services/stakeholderService'
 import groundingService from './services/groundingService'
@@ -23,6 +24,9 @@ function App() {
   const [finalSuccessMessage, setFinalSuccessMessage] = useState('')
   const [jiraSentTickets, setJiraSentTickets] = useState([])
   const [error, setError] = useState('')
+  
+  // AI Model selection
+  const [selectedAIModel, setSelectedAIModel] = useState({ provider: 'openai', model: 'gpt-4-turbo-preview' })
   
   // New state for stakeholder analysis
   const [stakeholders, setStakeholders] = useState([])
@@ -164,6 +168,10 @@ function App() {
     try {
       const formData = new FormData()
       formData.append('file', uploadedFile)
+      
+      // Add AI model selection to form data
+      formData.append('aiProvider', selectedAIModel.provider)
+      formData.append('aiModel', selectedAIModel.model)
 
       // Use the new /api/upload/document endpoint that supports both Excel and Word
       let response
@@ -490,12 +498,19 @@ function App() {
           )}
 
           {!isProcessing ? (
-            <FileUpload
-              onFileSelect={handleFileSelect}
-              onProcess={handleProcess}
-              disabled={isProcessing}
-              uploadedFile={uploadedFile}
-            />
+            <div className="space-y-6">
+              <ModelSelector
+                onModelChange={setSelectedAIModel}
+                disabled={isProcessing}
+              />
+              
+              <FileUpload
+                onFileSelect={handleFileSelect}
+                onProcess={handleProcess}
+                disabled={isProcessing}
+                uploadedFile={uploadedFile}
+              />
+            </div>
           ) : (
             <ProgressBar />
           )}

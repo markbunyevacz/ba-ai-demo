@@ -1,10 +1,14 @@
 import mammoth from 'mammoth'
+import AIAnalysisService from './aiAnalysisService.js'
 
 /**
  * DocumentParser Service
  * Handles parsing and extraction of content from Word documents (.docx files)
  */
 class DocumentParser {
+  constructor(aiOptions = {}) {
+    this.aiService = new AIAnalysisService(aiOptions)
+  }
   /**
    * Parse a Word document buffer and extract plain text
    * @param {Buffer} buffer - The .docx file buffer
@@ -12,7 +16,8 @@ class DocumentParser {
    */
   async parseWordDocument(buffer) {
     try {
-      const result = await mammoth.extractRawText({ arrayBuffer: buffer })
+      const mammothBuffer = buffer instanceof ArrayBuffer ? Buffer.from(buffer) : buffer
+      const result = await mammoth.extractRawText({ buffer: mammothBuffer })
       return result.value
     } catch (error) {
       throw new Error(`Failed to parse Word document: ${error.message}`)
@@ -26,7 +31,8 @@ class DocumentParser {
    */
   async extractStructuredContent(buffer) {
     try {
-      const result = await mammoth.convertToHtml({ arrayBuffer: buffer })
+      const mammothBuffer = buffer instanceof ArrayBuffer ? Buffer.from(buffer) : buffer
+      const result = await mammoth.convertToHtml({ buffer: mammothBuffer })
       const html = result.value
 
       // Parse HTML to extract structure
@@ -156,7 +162,8 @@ class DocumentParser {
    */
   async extractMetadata(buffer) {
     try {
-      const result = await mammoth.convertToHtml({ arrayBuffer: buffer })
+      const mammothBuffer = buffer instanceof ArrayBuffer ? Buffer.from(buffer) : buffer
+      const result = await mammoth.convertToHtml({ buffer: mammothBuffer })
       
       // Extract metadata from the document
       const metadata = {
@@ -396,6 +403,184 @@ class DocumentParser {
     }
 
     return criteria.length > 0 ? criteria : []
+  }
+
+  /**
+   * Analyze document content using AI to extract structured requirements
+   * @param {string} documentContent - Plain text from document
+   * @param {Object} options - Analysis options
+   * @returns {Promise<Object>} AI-analyzed tickets with structure
+   */
+  async analyzeWithAI(documentContent, options = {}) {
+    try {
+      console.log('[DocumentParser] Starting AI analysis...')
+      
+      // 1. Structure detection (Story/Epic/Feature)
+      const structure = await this.aiService.analyzeDocumentStructure(documentContent)
+      
+      if (structure.fallback || structure.confidence < 0.6) {
+        console.warn('[DocumentParser] AI confidence low or unavailable, falling back to rule-based parsing')
+        const fallbackTickets = this.convertToTickets(documentContent, options)
+        return {
+          tickets: fallbackTickets,
+          epics: [],
+          processFlow: null,
+          strategicInsights: null,
+          metadata: {
+            aiPowered: false,
+            fallback: true,
+            reason: structure.error || 'Low confidence',
+            confidence: structure.confidence
+          }
+        }
+      }
+
+      console.log(`[DocumentParser] AI analysis complete. Confidence: ${structure.confidence}`)
+      console.log(`[DocumentParser] Found ${structure.epics?.length || 0} epics, ${structure.stories?.length || 0} stories, ${structure.features?.length || 0} features`)
+      
+      // 2. Convert AI structure to ticket format
+      const tickets = this._convertAIStructureToTickets(structure, options)
+      
+      console.log('[DocumentParser] Starting strategic analysis...')
+      // 3. Strategic analysis on generated tickets
+      const strategicInsights = await this.aiService.performStrategicAnalysis(tickets)
+      
+      console.log('[DocumentParser] Starting process flow detection...')
+      // 4. Process flow detection
+      const processFlow = await this.aiService.detectProcessFlow(tickets)
+      
+      // 5. Merge all analysis results
+      const enrichedTickets = tickets.map(ticket => ({
+        ...ticket,
+        _aiAnalysis: {
+          structureConfidence: structure.confidence,
+          strategicInsights: strategicInsights.executiveSummary || null,
+          processRole: processFlow.steps?.find(s => s.ticketId === ticket.id)?.swimlane || null,
+          aiGenerated: true
+        }
+      }))
+
+      console.log('[DocumentParser] ✓ AI analysis pipeline complete')
+      console.log('[DocumentParser] Cost stats:', this.aiService.getCostStats())
+
+      return {
+        tickets: enrichedTickets,
+        epics: structure.epics || [],
+        processFlow: processFlow,
+        strategicInsights: strategicInsights,
+        metadata: {
+          aiPowered: true,
+          confidence: structure.confidence,
+          analysisComplete: true,
+          summary: structure.summary || '',
+          costStats: this.aiService.getCostStats()
+        }
+      }
+    } catch (error) {
+      console.error('[DocumentParser] AI analysis failed:', error.message)
+      // Fallback to deterministic parsing
+      const fallbackTickets = this.convertToTickets(documentContent, options)
+      return {
+        tickets: fallbackTickets,
+        epics: [],
+        processFlow: null,
+        strategicInsights: null,
+        metadata: {
+          aiPowered: false,
+          fallback: true,
+          error: error.message
+        }
+      }
+    }
+  }
+
+  /**
+   * Convert AI-detected structure to ticket objects
+   * @param {Object} structure - AI analysis structure
+   * @param {Object} options - Ticket generation options
+   * @returns {Array<Object>} Array of ticket objects
+   * @private
+   */
+  _convertAIStructureToTickets(structure, options) {
+    const { ticketPrefix = 'MVM', ticketNumber = 1000, priority = 'Medium', assignee = 'Unassigned' } = options
+    const tickets = []
+    let counter = 0
+
+    // Process stories
+    if (structure.stories && Array.isArray(structure.stories)) {
+      structure.stories.forEach(story => {
+        const storyId = `${ticketPrefix}-${ticketNumber + counter++}`
+        tickets.push({
+          id: storyId,
+          type: 'Story',
+          summary: story.persona ? `Mint ${story.persona}, ${story.goal}` : story.goal,
+          description: story.value ? `Azért, hogy ${story.value}` : (story.description || ''),
+          priority: story.priority || priority,
+          assignee: assignee,
+          epic: story.epic || 'No Epic',
+          acceptanceCriteria: story.acceptanceCriteria || [],
+          createdAt: new Date().toISOString(),
+          _aiGenerated: true,
+          _aiMetadata: {
+            originalId: story.id,
+            persona: story.persona,
+            goal: story.goal,
+            value: story.value
+          }
+        })
+      })
+    }
+
+    // Process features
+    if (structure.features && Array.isArray(structure.features)) {
+      structure.features.forEach(feature => {
+        const featureId = `${ticketPrefix}-${ticketNumber + counter++}`
+        tickets.push({
+          id: featureId,
+          type: 'Feature',
+          summary: feature.name,
+          description: feature.description || '',
+          priority: feature.priority || priority,
+          assignee: assignee,
+          epic: feature.epic || 'No Epic',
+          acceptanceCriteria: feature.acceptanceCriteria || [],
+          createdAt: new Date().toISOString(),
+          _aiGenerated: true,
+          _aiMetadata: {
+            originalId: feature.id
+          }
+        })
+      })
+    }
+
+    // Process tasks
+    if (structure.tasks && Array.isArray(structure.tasks)) {
+      structure.tasks.forEach(task => {
+        const taskId = `${ticketPrefix}-${ticketNumber + counter++}`
+        tickets.push({
+          id: taskId,
+          type: 'Task',
+          summary: task.name,
+          description: task.description || '',
+          priority: priority,
+          assignee: task.assignedTo || assignee,
+          epic: 'No Epic',
+          acceptanceCriteria: [],
+          createdAt: new Date().toISOString(),
+          _aiGenerated: true,
+          _aiMetadata: {
+            originalId: task.id
+          }
+        })
+      })
+    }
+
+    // If no tickets generated, log warning
+    if (tickets.length === 0) {
+      console.warn('[DocumentParser] No tickets generated from AI structure. Structure:', JSON.stringify(structure, null, 2))
+    }
+
+    return tickets
   }
 }
 
