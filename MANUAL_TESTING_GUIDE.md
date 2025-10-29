@@ -187,6 +187,38 @@ MVM-1371: [Next ticket]
 
 ---
 
+## 🧫 Test Scenario 7: Standards Compliance Riport és Export
+
+### Előkészületek
+- Tölts fel bármelyik minta XLSX/Word fájlt a megszokott módon
+- Várd meg, amíg a feldolgozás sikeresen befejeződik (ProgressBar → sikeres állapot)
+
+### Lépések
+1. **Standards Compliance panel megtekintése**
+   - A "Standards Compliance" kártyán ellenőrizd a státusz badge-eket (Compliant/Partial/Gap)
+   - Győződj meg róla, hogy a legfontosabb ajánlások megjelennek a lista tetején
+
+2. **Riport generálás**
+   - A "Standards Compliance Report" dobozban válaszd ki a `Szabvány` legördülő menüt
+     - Teszteld az `Összes (PMI + BABOK)` opciót és legalább egy konkrét szabványt (pl. `PMI`)
+   - Kattints a "Compliance riport generálása" gombra
+   - Ellenőrizd, hogy a modal sikeresen megjelenik, és a felső statisztikák a kiválasztott szabvány(ok)nak megfelelően frissülnek
+
+3. **Exportok ellenőrzése**
+   - A modalban kattints az `Export JSON` gombra → ellenőrizd, hogy a böngésző letölt egy `compliance-report-*.json` fájlt
+   - Ugyanez `Export CSV` gombbal → töltsd le, majd nyisd meg (pl. Excel/Numbers) és ellenőrizd az oszlopokat (Ticket, Status, Score, Gaps)
+
+4. **Riport történet**
+   - Zárd be a modalt (`✕` gomb)
+   - A "Legutóbbi compliance riportok" listában jelenjen meg a most generált futás időbélyeggel, szabvány-információval és átlagpontszámmal
+
+### Sikerességi Kritériumok
+- ✅ A panel helyesen mutatja a PMI/BABOK státuszokat és ajánlásokat
+- ✅ A riport generálás hibamentes, mindkét export fájl letölthető és tartalma értelmezhető
+- ✅ A riport történetben megjelenik a futás a megfelelő metaadatokkal
+
+---
+
 ## 🧫 Test Scenario 6: Verify Error Messages
 
 ### Check each error message type:

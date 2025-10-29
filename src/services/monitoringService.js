@@ -51,6 +51,7 @@ class MonitoringService {
     this.stakeholderHistory = []
     this.documentParsingHistory = []
     this.bpmnQualityHistory = []
+    this.complianceReports = []
     this.initializeMonitoring()
   }
 
@@ -121,6 +122,27 @@ class MonitoringService {
       }
     } else {
       this.metrics.failedRequests++
+    }
+
+    if (session?.type === 'compliance-report') {
+      const standards = Array.isArray(result?.standards) && result.standards.length > 0
+        ? result.standards
+        : Array.isArray(session?.standards) && session.standards.length > 0
+          ? session.standards
+          : ['ALL']
+
+      this.complianceReports.push({
+        id: session.id,
+        timestamp: new Date().toISOString(),
+        standards,
+        ticketsEvaluated: result.ticketsEvaluated || session?.tickets || 0,
+        averageScore: typeof result.averageScore === 'number' ? result.averageScore : null,
+        success: Boolean(result.success)
+      })
+
+      if (this.complianceReports.length > 25) {
+        this.complianceReports.shift()
+      }
     }
 
     // Check for performance issues
@@ -498,6 +520,16 @@ class MonitoringService {
       }))
   }
 
+  getComplianceReports(limit = 5) {
+    if (!Array.isArray(this.complianceReports) || this.complianceReports.length === 0) {
+      return []
+    }
+
+    return this.complianceReports
+      .slice(-limit)
+      .reverse()
+  }
+
   /**
    * Reset metrics
    */
@@ -566,6 +598,7 @@ class MonitoringService {
         documents: this.documentParsingHistory.slice(-200),
         bpmn: this.bpmnQualityHistory.slice(-200)
       },
+      complianceReports: this.getComplianceReports(25),
       exportTimestamp: new Date().toISOString()
     }
   }

@@ -8,7 +8,8 @@ const mocks = vi.hoisted(() => ({
   trackRequestMock: vi.fn(() => 'session-1'),
   trackCompletionMock: vi.fn(),
   exportJsonMock: vi.fn(),
-  exportCsvMock: vi.fn()
+  exportCsvMock: vi.fn(),
+  getComplianceReportsMock: vi.fn(() => [])
 }))
 
 vi.mock('../../services/complianceClient.js', () => ({
@@ -25,7 +26,8 @@ vi.mock('../../services/monitoringService.js', () => ({
   __esModule: true,
   default: {
     trackRequest: mocks.trackRequestMock,
-    trackCompletion: mocks.trackCompletionMock
+    trackCompletion: mocks.trackCompletionMock,
+    getComplianceReports: mocks.getComplianceReportsMock
   }
 }))
 
@@ -59,6 +61,7 @@ describe('ComplianceReportPanel', () => {
     mocks.trackCompletionMock.mockReset()
     mocks.exportJsonMock.mockReset()
     mocks.exportCsvMock.mockReset()
+    mocks.getComplianceReportsMock.mockReturnValue([])
   })
 
   it('generates report and triggers exports', async () => {

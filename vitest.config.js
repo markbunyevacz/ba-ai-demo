@@ -14,11 +14,11 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./vitest.setup.js'],
     globals: true,
-    pool: 'forks',
+    pool: 'threads',
     poolOptions: {
-      forks: {
-        maxForks: 1,
-        minForks: 1
+      threads: {
+        maxThreads: 1,
+        minThreads: 1
       }
     },
     coverage: {

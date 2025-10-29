@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import PropTypes from 'prop-types'
 
 import complianceClient from '../services/complianceClient.js'
@@ -27,8 +27,43 @@ const ComplianceReportPanel = ({ tickets }) => {
   const [error, setError] = useState('')
   const [report, setReport] = useState(null)
   const [showModal, setShowModal] = useState(false)
+  const [availableStandards, setAvailableStandards] = useState([])
+  const [selectedStandard, setSelectedStandard] = useState('ALL')
+  const [standardsLoading, setStandardsLoading] = useState(false)
+  const [standardsError, setStandardsError] = useState('')
+  const [reportHistory, setReportHistory] = useState(() => monitoringService.getComplianceReports())
 
   const hasTickets = Array.isArray(tickets) && tickets.length > 0
+
+  useEffect(() => {
+    let isMounted = true
+
+    const loadStandards = async () => {
+      setStandardsLoading(true)
+      setStandardsError('')
+      try {
+        const standards = await complianceClient.fetchStandards()
+        if (isMounted) {
+          setAvailableStandards(Array.isArray(standards) ? standards : [])
+        }
+      } catch (err) {
+        if (isMounted) {
+          setStandardsError(err?.message || 'Nem sikerült betölteni a szabványokat, alapértelmezett értékek használata.')
+          setAvailableStandards([])
+        }
+      } finally {
+        if (isMounted) {
+          setStandardsLoading(false)
+        }
+      }
+    }
+
+    loadStandards()
+    setReportHistory(monitoringService.getComplianceReports())
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   const handleGenerateReport = async () => {
     if (!hasTickets) {
@@ -36,32 +71,39 @@ const ComplianceReportPanel = ({ tickets }) => {
       return
     }
 
+    const requestedStandards = selectedStandard === 'ALL' ? [] : [selectedStandard]
     const sessionId = monitoringService.trackRequest({
       endpoint: '/api/compliance/report',
       type: 'compliance-report',
-      tickets: tickets.length
+      tickets: tickets.length,
+      standards: requestedStandards
     })
 
     setLoading(true)
     setError('')
 
     try {
-      const data = await complianceClient.generateReport(tickets)
+      const payload = requestedStandards.length > 0 ? { standards: requestedStandards } : {}
+      const data = await complianceClient.generateReport(tickets, payload)
       setReport(data)
       setShowModal(true)
 
       monitoringService.trackCompletion(sessionId, {
         success: true,
         ticketsEvaluated: data?.totalTickets || 0,
-        averageScore: data?.averageScore || 0
+        averageScore: data?.averageScore || 0,
+        standards: requestedStandards.length > 0 ? requestedStandards : ['ALL']
       })
+      setReportHistory(monitoringService.getComplianceReports())
     } catch (err) {
       const message = err?.message || 'Nem sikerült a riport létrehozása.'
       setError(message)
       monitoringService.trackCompletion(sessionId, {
         success: false,
-        error: message
+        error: message,
+        standards: requestedStandards.length > 0 ? requestedStandards : ['ALL']
       })
+      setReportHistory(monitoringService.getComplianceReports())
     } finally {
       setLoading(false)
     }
@@ -85,6 +127,27 @@ const ComplianceReportPanel = ({ tickets }) => {
           <div>
             <h4 className="text-lg font-semibold text-[#003366]">Standards Compliance Report</h4>
             <p className="text-sm text-slate-500">PMI/BABOK riport generálása és exportálása</p>
+            <div className="mt-3 flex items-center gap-2 text-xs text-slate-600">
+              <label htmlFor="compliance-standard" className="font-semibold text-slate-700">
+                Szabvány:
+              </label>
+              <select
+                id="compliance-standard"
+                className="border border-slate-200 rounded-md px-2 py-1 text-xs"
+                value={selectedStandard}
+                onChange={(event) => setSelectedStandard(event.target.value)}
+                disabled={standardsLoading}
+              >
+                <option value="ALL">Összes (PMI + BABOK)</option>
+                {(availableStandards.length > 0 ? availableStandards : ['PMI', 'BABOK']).map(standard => (
+                  <option key={standard} value={standard}>{standard}</option>
+                ))}
+              </select>
+              {standardsLoading && <span className="text-slate-400">Betöltés...</span>}
+            </div>
+            {standardsError && (
+              <p className="mt-2 text-xs text-amber-600">{standardsError}</p>
+            )}
           </div>
           <button
             type="button"
@@ -112,6 +175,25 @@ const ComplianceReportPanel = ({ tickets }) => {
           onExportJson={handleExportJson}
           onExportCsv={handleExportCsv}
         />
+      )}
+
+      {reportHistory.length > 0 && (
+        <div className="mt-4 bg-slate-50 border border-slate-200 rounded-lg p-4">
+          <h5 className="text-sm font-semibold text-slate-700 mb-2">Legutóbbi compliance riportok</h5>
+          <ul className="space-y-1 text-xs text-slate-600">
+            {reportHistory.map(entry => (
+              <li key={entry.id} className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-semibold text-slate-700">{new Date(entry.timestamp).toLocaleString()}</span>
+                <span>Szabvány: {entry.standards.join(', ')}</span>
+                <span>Riport státusz: {entry.success ? 'sikeres' : 'sikertelen'}</span>
+                <span>Ticketek: {entry.ticketsEvaluated}</span>
+                {typeof entry.averageScore === 'number' && (
+                  <span>Átlagpontszám: {Math.round(entry.averageScore * 100)}%</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   )
