@@ -15,13 +15,58 @@ export const BUSINESS_RULES = {
       'URGENT': 'Critical',
       'HIGH': 'High',
       'MEDIUM': 'Medium',
-      'LOW': 'Low'
+      'LOW': 'Low',
+      'Must have': 'Critical',
+      'Should have': 'High',
+      'Could have': 'Medium',
+      "Won't have": 'Low',
+      'Must Have': 'Critical',
+      'Should Have': 'High',
+      'Could Have': 'Medium',
+      "Won't Have": 'Low'
     },
     escalationRules: {
       'Critical': { maxAge: 24, escalation: 'Immediate' },
       'High': { maxAge: 72, escalation: 'Within 3 days' },
       'Medium': { maxAge: 168, escalation: 'Within 1 week' },
       'Low': { maxAge: 720, escalation: 'Within 1 month' }
+    },
+    moscowCategories: ['Must have', 'Should have', 'Could have', "Won't have"],
+    moscowMapping: {
+      default: {
+        Critical: 'Must have',
+        High: 'Should have',
+        Medium: 'Could have',
+        Low: "Won't have"
+      },
+      overrides: {
+        compliance: ['Must have'],
+        security: ['Must have'],
+        dependency: ['Should have', 'Must have'],
+        enhancement: ['Could have'],
+        backlog: ["Won't have"]
+      },
+      synonyms: {
+        must: 'Must have',
+        should: 'Should have',
+        could: 'Could have',
+        wont: "Won't have",
+        "won't": "Won't have",
+        wishlist: "Won't have"
+      }
+    },
+    classificationWeights: {
+      businessValue: 0.35,
+      urgency: 0.25,
+      risk: 0.2,
+      dependencies: 0.1,
+      stakeholderImpact: 0.1
+    },
+    keywordSignals: {
+      must: ['regulatory', 'compliance', 'blocker', 'p0', 'critical path', 'legal requirement'],
+      should: ['important', 'high impact', 'customer request', 'dependency'],
+      could: ['nice to have', 'enhancement', 'optimization', 'future'],
+      wont: ['out of scope', 'deferred', 'phase 2', 'future consideration']
     }
   },
 
@@ -510,6 +555,106 @@ export const STRATEGIC_ANALYSIS_CONFIG = {
   TEMPLATES: STRATEGIC_ANALYSIS.RECOMMENDATION_TEMPLATES
 }
 
+export const STANDARDS_COMPLIANCE = {
+  thresholds: {
+    compliant: 0.8,
+    caution: 0.6
+  },
+  PMI: {
+    id: 'PMI',
+    name: 'PMI PMBOK',
+    description: 'Process groups and knowledge areas aligned to PMI PMBOK 7th Edition',
+    processGroups: {
+      initiating: {
+        requiredFields: ['summary', 'businessValue', 'stakeholders'],
+        keywords: ['vision', 'charter', 'benefit', 'business case']
+      },
+      planning: {
+        requiredFields: ['acceptanceCriteria', 'dueDate', 'assignee'],
+        keywords: ['plan', 'schedule', 'milestone', 'roadmap']
+      },
+      executing: {
+        requiredFields: ['description', 'assigneeTeam', 'dependencies'],
+        keywords: ['implement', 'develop', 'execute', 'deliver']
+      },
+      monitoring: {
+        requiredFields: ['status', 'risk', 'metrics'],
+        keywords: ['monitor', 'measure', 'tracking', 'variance']
+      },
+      closing: {
+        requiredFields: ['acceptanceCriteria', 'definitionOfDone', 'handover'],
+        keywords: ['closure', 'sign-off', 'transition', 'handover']
+      }
+    },
+    knowledgeAreas: {
+      integration: { fields: ['summary', 'description', 'dependencies'], weight: 0.15 },
+      scope: { fields: ['acceptanceCriteria', 'description'], weight: 0.15 },
+      schedule: { fields: ['dueDate', 'startDate', 'milestones'], weight: 0.1 },
+      cost: { fields: ['cost', 'budget'], weight: 0.1 },
+      quality: { fields: ['acceptanceCriteria', 'qualityCriteria'], weight: 0.1 },
+      resource: { fields: ['assignee', 'assigneeTeam'], weight: 0.1 },
+      communications: { fields: ['stakeholders', 'communicationPlan'], weight: 0.1 },
+      risk: { fields: ['risk', 'mitigation', 'dependencies'], weight: 0.1 },
+      procurement: { fields: ['vendor', 'contract'], weight: 0.05 },
+      stakeholder: { fields: ['stakeholders', 'stakeholderMatrix'], weight: 0.05 }
+    },
+    recommendations: {
+      missingStakeholders: 'Add stakeholder list or stakeholder matrix reference to support PMI Stakeholder Management.',
+      missingSchedule: 'Provide target dates or milestones to align with PMI Schedule Management.',
+      missingRisk: 'Document identified risks and mitigations to satisfy PMI Risk Management guidance.',
+      missingQuality: 'Define quality or acceptance criteria for PMI Quality Management.'
+    }
+  },
+  BABOK: {
+    id: 'BABOK',
+    name: 'IIBA BABOK',
+    description: 'Business analysis knowledge areas from BABOK v3',
+    knowledgeAreas: {
+      planningMonitoring: {
+        keywords: ['plan', 'approach', 'estimate', 'governance'],
+        indicators: ['summary', 'businessValue', 'stakeholders'],
+        weight: 0.18
+      },
+      elicitationCollaboration: {
+        keywords: ['interview', 'workshop', 'feedback', 'comment'],
+        indicators: ['comments', 'stakeholders'],
+        weight: 0.17
+      },
+      requirementsLifecycle: {
+        keywords: ['traceability', 'change control', 'approval'],
+        indicators: ['acceptanceCriteria', 'status'],
+        weight: 0.15
+      },
+      strategyAnalysis: {
+        keywords: ['objective', 'benefit', 'value', 'business case'],
+        indicators: ['businessValue', 'epic'],
+        weight: 0.15
+      },
+      requirementsAnalysis: {
+        keywords: ['requirement', 'user story', 'use case', 'model'],
+        indicators: ['description', 'acceptanceCriteria'],
+        weight: 0.2
+      },
+      solutionEvaluation: {
+        keywords: ['measure', 'performance', 'outcome', 'benefit realisation'],
+        indicators: ['metrics', 'successCriteria'],
+        weight: 0.15
+      }
+    },
+    deliverables: {
+      backlogItem: ['summary', 'description', 'acceptanceCriteria'],
+      stakeholderMatrix: ['stakeholders', 'stakeholderMatrix'],
+      requirementsTrace: ['acceptanceCriteria', 'dependencies', 'epic'],
+      valueAssessment: ['businessValue', 'metrics']
+    },
+    recommendations: {
+      missingValue: 'Document business value or KPI expectations to align with BABOK Value Assessment.',
+      missingTraceability: 'Capture dependencies or epics to maintain requirements traceability in BABOK.',
+      missingCollaboration: 'Record stakeholder interactions or comments to evidence BABOK Elicitation & Collaboration.'
+    }
+  }
+}
+
 export const QUALITY_METRICS = {
   // Confidence scoring weights
   CONFIDENCE_WEIGHTS: {
@@ -573,5 +718,6 @@ export default {
   DOMAIN_KNOWLEDGE,
   STAKEHOLDER_ANALYSIS,
   QUALITY_METRICS,
-  ERROR_MESSAGES
+  ERROR_MESSAGES,
+  STANDARDS_COMPLIANCE
 }

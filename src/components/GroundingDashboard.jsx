@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
+import CompliancePanel from './CompliancePanel.jsx'
 
 const GroundingDashboard = ({ tickets = [] }) => {
   const [groundingStats, setGroundingStats] = useState(null)
@@ -48,6 +49,16 @@ const GroundingDashboard = ({ tickets = [] }) => {
   }
 
   const ticketStats = calculateTicketStats()
+
+  const complianceItems = useMemo(() => (
+    tickets
+      .map(ticket => ({
+        id: ticket.id,
+        summary: ticket.summary,
+        compliance: ticket._grounding?.compliance
+      }))
+      .filter(item => item.compliance)
+  ), [tickets])
 
   if (loading) {
     return (
@@ -189,6 +200,8 @@ const GroundingDashboard = ({ tickets = [] }) => {
           </div>
         </div>
       )}
+
+      <CompliancePanel items={complianceItems} />
 
       {/* Grounding Features */}
       <div className="mt-6 pt-6 border-t border-gray-200">

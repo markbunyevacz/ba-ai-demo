@@ -11,6 +11,7 @@ import {
   QUALITY_METRICS, 
   ERROR_MESSAGES 
 } from '../config/knowledgeBase.js'
+import complianceService from './complianceService.js'
 
 class GroundingService {
   constructor() {
@@ -102,6 +103,22 @@ class GroundingService {
     if (hallucinationCheck.detected) {
       validation.issues.push(`Potential hallucination: ${hallucinationCheck.reason}`)
       validation.confidence -= 0.3
+    }
+
+    // Standards compliance validation
+    try {
+      const compliance = complianceService.evaluateTicket(ticket)
+      validation.compliance = compliance
+
+      if (compliance.status === 'gap') {
+        validation.issues.push('Ticket fails PMI/BABOK compliance checks')
+        validation.confidence -= 0.15
+      } else if (compliance.status === 'partial') {
+        validation.warnings.push('Ticket partially meets PMI/BABOK standards')
+        validation.confidence -= 0.05
+      }
+    } catch (complianceError) {
+      validation.warnings.push(`Compliance evaluation failed: ${complianceError.message}`)
     }
 
     // Add source attribution

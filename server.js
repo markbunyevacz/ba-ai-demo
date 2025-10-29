@@ -11,6 +11,7 @@ import JiraService from './src/services/jiraService.js'
 import SessionStore from './src/services/sessionStore.js'
 import DocumentParser from './src/services/documentParser.js'
 import diagramService from './src/services/diagramService.js'
+import complianceService from './src/services/complianceService.js'
 
 // Load environment variables
 dotenv.config()
@@ -887,6 +888,61 @@ app.post('/api/diagrams/generate', async (req, res) => {
   } catch (error) {
     console.error('Diagram generation error:', error)
     res.status(500).json({ error: error.message })
+  }
+})
+
+app.get('/api/compliance/standards', (req, res) => {
+  try {
+    const standards = complianceService.getAvailableStandards()
+    res.json({ standards })
+  } catch (error) {
+    console.error('Compliance standards error:', error)
+    res.status(500).json({
+      error: 'Failed to fetch compliance standards',
+      details: error.message
+    })
+  }
+})
+
+app.post('/api/compliance/validate', (req, res) => {
+  try {
+    const { tickets, standards } = req.body || {}
+
+    if (!Array.isArray(tickets) || tickets.length === 0) {
+      return res.status(400).json({
+        error: 'Tickets array is required for compliance validation'
+      })
+    }
+
+    const results = complianceService.evaluateTickets(tickets, { standards })
+    res.json({ results })
+  } catch (error) {
+    console.error('Compliance validation error:', error)
+    res.status(500).json({
+      error: 'Failed to validate compliance',
+      details: error.message
+    })
+  }
+})
+
+app.post('/api/compliance/report', (req, res) => {
+  try {
+    const { tickets, standards } = req.body || {}
+
+    if (!Array.isArray(tickets) || tickets.length === 0) {
+      return res.status(400).json({
+        error: 'Tickets array is required to generate compliance report'
+      })
+    }
+
+    const report = complianceService.generateReport(tickets, { standards })
+    res.json({ report })
+  } catch (error) {
+    console.error('Compliance report error:', error)
+    res.status(500).json({
+      error: 'Failed to generate compliance report',
+      details: error.message
+    })
   }
 })
 

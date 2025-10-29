@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import FileUpload from './components/FileUpload'
 import ProgressBar from './components/ProgressBar'
 import SuccessModal from './components/SuccessModal'
@@ -14,6 +14,9 @@ import stakeholderService from './services/stakeholderService'
 import groundingService from './services/groundingService'
 import monitoringService from './services/monitoringService'
 import diagramClient from './services/diagramClient'
+import MoSCoWDashboard from './components/MoSCoWDashboard'
+import prioritizationService from './services/prioritizationService'
+import ComplianceReportPanel from './components/ComplianceReportPanel'
 
 function App() {
   const [uploadedFile, setUploadedFile] = useState(null)
@@ -39,12 +42,15 @@ function App() {
   const [workflowError, setWorkflowError] = useState('')
   const [diagram, setDiagram] = useState(null)
   const [documentPreview, setDocumentPreview] = useState(null)
+  const [moscowSummary, setMoscowSummary] = useState(null)
   
   // New state for Jira OAuth
   const [jiraSessionId, setJiraSessionId] = useState(null)
   const [jiraAuthenticated, setJiraAuthenticated] = useState(false)
   const [isJiraSending, setIsJiraSending] = useState(false)
   const [jiraError, setJiraError] = useState('')
+
+  const categoryOptions = useMemo(() => prioritizationService.getCategoryOrder(), [])
 
   // Check for OAuth callback and authentication status on mount
   useEffect(() => {
@@ -150,6 +156,7 @@ function App() {
       setWorkflowError('')
       setDiagram(null)
       setDocumentPreview(null)
+      setMoscowSummary(null)
       setError('')
     } else {
       setError('Kérjük, válasszon Excel (.xlsx) vagy Word (.docx) fájlt')
@@ -242,12 +249,14 @@ function App() {
 
       // Wait for ProgressBar animation to complete (3 seconds)
       setTimeout(() => {
-        setTickets(data.tickets)
+        const prioritizedTickets = prioritizationService.classifyTickets(data.tickets)
+        setTickets(prioritizedTickets)
+        setMoscowSummary(prioritizationService.getPortfolioSummary(prioritizedTickets))
         setDocumentPreview(data.preview || null)
         setDiagram(data.diagrams || null)
 
         try {
-          const workflowAnalysis = bpmnService.analyzeWorkflow(data.tickets)
+          const workflowAnalysis = bpmnService.analyzeWorkflow(prioritizedTickets)
           const generatedXml = bpmnService.generateBPMNXML(workflowAnalysis)
           setWorkflow(workflowAnalysis)
           setBpmnXml(generatedXml)
@@ -261,7 +270,7 @@ function App() {
         // === NEW: Perform stakeholder analysis ===
         try {
           // Extract stakeholders from tickets
-          const extractedStakeholders = stakeholderService.identifyStakeholders(data.tickets)
+          const extractedStakeholders = stakeholderService.identifyStakeholders(prioritizedTickets)
           setStakeholders(extractedStakeholders)
           
           // Generate power/interest matrix
@@ -278,9 +287,9 @@ function App() {
           
           // Validate stakeholder data
           const validation = groundingService.validateStakeholders(extractedStakeholders)
-          const hallucinations = groundingService.detectStakeholderHallucinations(extractedStakeholders, data.tickets)
+          const hallucinations = groundingService.detectStakeholderHallucinations(extractedStakeholders, prioritizedTickets)
           const communicationPlans = stakeholderService.generateCommunicationPlans(extractedStakeholders)
-          const assignmentValidation = stakeholderService.validateAssignments(data.tickets, extractedStakeholders)
+          const assignmentValidation = stakeholderService.validateAssignments(prioritizedTickets, extractedStakeholders)
 
           setStakeholderValidation({
             ...validation,
@@ -307,6 +316,18 @@ function App() {
       setIsProcessing(false)
       setTimeout(() => setError(''), 8000)
     }
+  }
+
+  const handleMoSCoWClassificationChange = (ticketId, category) => {
+    setTickets(prevTickets => {
+      const updated = prioritizationService.updateClassification(prevTickets, ticketId, category, {
+        user: 'ui-dashboard',
+        reason: 'Manual MoSCoW módosítás'
+      })
+
+      setMoscowSummary(prioritizationService.getPortfolioSummary(updated))
+      return updated
+    })
   }
 
   const handleJiraSend = () => {
@@ -525,6 +546,21 @@ function App() {
           {showSuccess && tickets.length > 0 && (
             <div className="mt-8">
               <GroundingDashboard tickets={tickets} />
+            </div>
+          )}
+
+          {showSuccess && (
+            <ComplianceReportPanel tickets={tickets} />
+          )}
+
+          {showSuccess && tickets.length > 0 && (
+            <div className="mt-8">
+              <MoSCoWDashboard
+                tickets={tickets}
+                summary={moscowSummary}
+                categories={categoryOptions}
+                onClassificationChange={handleMoSCoWClassificationChange}
+              />
             </div>
           )}
 
