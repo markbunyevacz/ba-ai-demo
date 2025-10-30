@@ -31,7 +31,10 @@ app.include_router(diagrams.router, prefix="/api/diagrams", tags=["diagrams"])
 app.include_router(ai.router, prefix="/api/ai", tags=["ai"])
 
 # Static files (optional, for compatibility with existing public assets)
-app.mount("/public", StaticFiles(directory=settings.PUBLIC_DIR), name="public")
+import os
+public_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "public")
+if os.path.exists(public_dir):
+    app.mount("/public", StaticFiles(directory=public_dir), name="public")
 
 
 @app.get("/api/health", tags=["health"])

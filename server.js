@@ -1,3 +1,33 @@
+/**
+ * ⚠️ DEPRECATED: JavaScript/Node.js Backend Server
+ * 
+ * This file is DEPRECATED and will be removed in a future release.
+ * 
+ * **Status**: Legacy/Fallback
+ * **Deprecation Date**: January 2025
+ * **Planned Removal**: Q2 2025 (after Python backend production verification)
+ * 
+ * **Migration Guide**: 
+ * - See `START_HERE_PYTHON_BACKEND.md` for Python backend setup
+ * - Python backend: `python-backend/main.py` (port 8000)
+ * - This server: `server.js` (port 5000, legacy)
+ * 
+ * **Why Deprecated**:
+ * - Functionality migrated to Python FastAPI backend
+ * - Python backend provides better performance and maintainability
+ * - Reduces code duplication and maintenance burden
+ * 
+ * **Action Required**:
+ * - Use Python backend for all new development
+ * - Migrate existing deployments to Python backend
+ * - This server is kept as fallback only
+ * 
+ * **Support**:
+ * - Python backend documentation: `python-backend/README.md`
+ * - Migration guide: `BACKEND_MIGRATION_SUMMARY.md`
+ * - Cleanup plan: `CODE_CLEANUP_RECOMMENDATIONS.md`
+ */
+
 import express from 'express'
 import cors from 'cors'
 import multer from 'multer'

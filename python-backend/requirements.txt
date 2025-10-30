@@ -1,2 +1,28 @@
-fastapi
-uvicorn[standard]
+# Core FastAPI dependencies
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# Configuration and settings
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# HTTP client for external APIs (Jira, etc.)
+httpx>=0.25.0
+
+# File processing
+openpyxl>=3.1.0  # Excel file processing
+python-docx>=1.1.0  # Word document processing (if needed)
+python-multipart>=0.0.6  # Required for FastAPI file uploads
+
+# NLP and text processing
+nltk>=3.8.0
+
+# Environment variables (fallback if pydantic-settings doesn't cover)
+python-dotenv>=1.0.0
+
+# Optional: Database support (if using PostgreSQL)
+# psycopg2-binary>=2.9.0
+
+# Optional: AI providers (install as needed)
+# anthropic>=0.18.0
+# openai>=1.0.0

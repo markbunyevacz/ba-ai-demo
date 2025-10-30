@@ -2,7 +2,13 @@
 from functools import lru_cache
 from typing import List
 
-from pydantic import AnyHttpUrl, BaseSettings, Field
+try:
+    # Pydantic v2
+    from pydantic_settings import BaseSettings
+    from pydantic import Field, AnyHttpUrl
+except ImportError:
+    # Pydantic v1 fallback
+    from pydantic import BaseSettings, Field, AnyHttpUrl
 
 
 class Settings(BaseSettings):
@@ -12,7 +18,7 @@ class Settings(BaseSettings):
     DEBUG: bool = False
 
     # Paths
-    PUBLIC_DIR: str = "public"
+    PUBLIC_DIR: str = Field(default="../public", description="Public directory path (relative to python-backend)")
 
     # CORS
     CORS_ORIGINS: List[str] = Field(default_factory=lambda: ["*"])

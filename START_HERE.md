@@ -38,23 +38,56 @@ All files are in your project root:
 └─ **.env.example** ................... Configuration template
 
 ### Code Changes
+
+**JavaScript Backend (Legacy):**
 ├─ **src/services/jiraService.js** .... Jira OAuth & API (NEW - 400+ lines)
 ├─ **src/services/sessionStore.js** .. Session management (NEW - 150+ lines)
 ├─ **server.js** ...................... OAuth routes added
 └─ **src/App.jsx** .................... OAuth flow added
 
+**Python Backend (Current):**
+├─ **python-backend/services/jira_service.py** ... Jira OAuth & API
+├─ **python-backend/services/session_store.py** .. Session management
+├─ **python-backend/api/routes/jira.py** ........ OAuth routes
+└─ **src/App.jsx** ............................. OAuth flow (works with both backends)
+
 ---
 
 ## 🚀 THREE WAYS TO GET STARTED
 
+> **📌 Backend Update**: The project now supports **Python FastAPI backend** (recommended) and **JavaScript backend** (legacy).  
+> For Python backend setup, see **[START_HERE_PYTHON_BACKEND.md](./START_HERE_PYTHON_BACKEND.md)**
+
 ### Option 1: QUICK START (5 minutes)
+
+**Python Backend (Recommended):**
+1. Read: `python-backend/QUICK_START.md`
+2. Set up Python backend: `cd python-backend && uvicorn main:app --reload --port 8000`
+3. Register OAuth app (if using Jira)
+4. Configure environment variables
+5. Start frontend: `npm run dev`
+6. Test!
+
+**JavaScript Backend (Legacy):**
 1. Read: QUICKSTART_JIRA.md
 2. Register OAuth app
 3. Configure .env
-4. Run: npm install && npm start
+4. Run: `npm install && npm start`
 5. Test!
 
 ### Option 2: COMPLETE SETUP (20 minutes)
+
+**Python Backend:**
+1. Read: `START_HERE_PYTHON_BACKEND.md` (complete Python setup)
+2. Read: GETTING_STARTED.md (Jira OAuth setup)
+3. Follow step-by-step instructions
+4. Register OAuth app
+5. Configure environment
+6. Install and start both backends
+7. Test OAuth flow
+8. Create Jira tickets
+
+**JavaScript Backend:**
 1. Read: GETTING_STARTED.md
 2. Follow step-by-step instructions
 3. Register OAuth app
@@ -67,7 +100,8 @@ All files are in your project root:
 1. Read: INDEX.md (navigation guide)
 2. Read: PROJECT_STATUS.md (overview)
 3. Read: JIRA_INTEGRATION_GUIDE.md (deep dive)
-4. Then follow setup steps
+4. Read: `START_HERE_PYTHON_BACKEND.md` (Python backend)
+5. Then follow setup steps
 
 ---
 

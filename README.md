@@ -222,6 +222,20 @@ Frontend stores sessionId in localStorage
 
 ### Running in Development Mode
 
+**Option 1: Python Backend (Recommended)**
+```bash
+# Terminal 1: Start Python backend
+cd python-backend
+python -m venv venv
+source venv/bin/activate  # Windows: .\venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+
+# Terminal 2: Start frontend with Vite hot reload
+npm run dev
+```
+
+**Option 2: JavaScript Backend (Legacy)**
 ```bash
 # Terminal 1: Start backend with nodemon
 npm run server
@@ -231,7 +245,16 @@ npm run dev
 ```
 
 ### Backend Architecture
-- **Express.js** server on port 3001
+
+**Python Backend (Current)**
+- **FastAPI** server on port 8000 (default)
+- Python 3.10+ with async/await
+- In-memory session store (use Redis in production)
+- Comprehensive error handling
+- See `python-backend/README.md` for details
+
+**JavaScript Backend (Legacy)**
+- **Express.js** server on port 5000
 - OAuth state tracking with 10-minute expiry
 - In-memory session store (use Redis in production)
 - Comprehensive error handling
@@ -246,17 +269,29 @@ npm run dev
 
 ### Grounding Statistics
 ```bash
-curl http://localhost:3001/api/grounding/stats
+# Python backend (port 8000)
+curl http://localhost:8000/api/grounding/stats
+
+# JavaScript backend (port 5000, legacy)
+curl http://localhost:5000/api/grounding/stats
 ```
 
 ### Performance Metrics
 ```bash
-curl http://localhost:3001/api/monitoring/metrics
+# Python backend (port 8000)
+curl http://localhost:8000/api/monitoring/metrics
+
+# JavaScript backend (port 5000, legacy)
+curl http://localhost:5000/api/monitoring/metrics
 ```
 
 ### Recent Alerts
 ```bash
-curl http://localhost:3001/api/monitoring/alerts
+# Python backend (port 8000)
+curl http://localhost:8000/api/monitoring/alerts
+
+# JavaScript backend (port 5000, legacy)
+curl http://localhost:5000/api/monitoring/alerts
 ```
 
 ## ⚠️ Common Issues

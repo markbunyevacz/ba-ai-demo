@@ -1,8 +1,15 @@
 # LangGraph/Anthropic Agent Integráció - Implementációs Összefoglaló
 
+> **📌 Backend Update**: This document describes the original JavaScript/Node.js implementation.  
+> The project now also supports **Python FastAPI backend**.  
+> For Python backend setup, see **[START_HERE_PYTHON_BACKEND.md](./START_HERE_PYTHON_BACKEND.md)**
+
 ## Áttekintés
 
 A BA AI Demo projekt sikeresen ki lett bővítve egy **LangGraph/Anthropic agent rendszerrel**, amely visszafelé kompatibilis és fallback mechanizmussal rendelkezik a meglévő szabály-alapú logikához képest.
+
+**Note**: This implementation uses JavaScript/Node.js backend (`server.js`).  
+Python backend equivalent is available in `python-backend/models/agents/` and `python-backend/models/workflow.py`.
 
 ## Implementált Komponensek
 

@@ -1,8 +1,9 @@
 # 🎯 START HERE - "Unexpected end of JSON input" Error - COMPLETE FIX
 
 **Status:** ✅ **PRODUCTION READY**  
-**Last Updated:** October 27, 2025  
-**Test Results:** 5/5 PASSED ✅
+**Last Updated:** January 2025  
+**Test Results:** 5/5 PASSED ✅  
+**Note:** This document describes a JSON error fix. For current backend setup, see `START_HERE_PYTHON_BACKEND.md`
 
 ---
 
@@ -26,23 +27,45 @@ Unexpected end of JSON input
 
 ## 🚀 Quick Start (5 Minutes)
 
-### Step 1: Backend Already Running ✅
-Backend is running on **port 5000** (started automatically)
+> **📌 Backend Update**: The project now uses **Python FastAPI backend** (port 8000) as the primary backend.  
+> For complete setup instructions, see **[START_HERE_PYTHON_BACKEND.md](./START_HERE_PYTHON_BACKEND.md)**
 
-Verify it's working:
+### Option 1: Python Backend (Recommended) ✅
+```bash
+# Terminal 1: Start Python backend
+cd python-backend
+python -m venv venv
+source venv/bin/activate  # Windows: .\venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+
+# Terminal 2: Start frontend
+npm run dev
+```
+
+Verify Python backend:
+```bash
+curl http://localhost:8000/api/health
+# Should return: {"status":"OK","version":"2.0.0","backend":"python"}
+```
+
+### Option 2: JavaScript Backend (Legacy)
+```bash
+# Terminal 1: Start JavaScript backend
+npm run server  # Runs on port 5000
+
+# Terminal 2: Start frontend
+npm run dev
+```
+
+Verify JavaScript backend:
 ```bash
 curl http://localhost:5000/api/health
 # Should return: {"status":"OK","uptime":...}
 ```
 
-### Step 2: Start Frontend
-```bash
-npm run dev
-# Frontend will run on port 3000 or 5173
-```
-
 ### Step 3: Test in Browser
-1. Open browser to http://localhost:5000
+1. Open browser to http://localhost:5173 (or 3000)
 2. Upload `docs/demo_simple.xlsx`
 3. Click "Feldolgozás" (Process)
 4. Verify 3 tickets are generated ✅
@@ -271,8 +294,19 @@ node test-xlsx-upload.js
 ## 🔍 Quick Reference
 
 ### Important URLs
+
+**Python Backend (Recommended):**
 ```
-Frontend:  http://localhost:5000
+Frontend:  http://localhost:5173
+Backend:   http://localhost:8000/api
+Health:    http://localhost:8000/api/health
+Upload:    http://localhost:8000/api/upload/document
+Metrics:   http://localhost:8000/api/monitoring/metrics
+```
+
+**JavaScript Backend (Legacy):**
+```
+Frontend:  http://localhost:5173
 Backend:   http://localhost:5000/api
 Health:    http://localhost:5000/api/health
 Upload:    http://localhost:5000/api/upload/document
@@ -280,16 +314,27 @@ Metrics:   http://localhost:5000/api/monitoring/metrics
 ```
 
 ### Important Commands
+
+**Python Backend:**
 ```bash
-# Backend
-npm run server                    # Start backend
+cd python-backend
+uvicorn main:app --reload --port 8000
+```
 
-# Frontend
+**JavaScript Backend (Legacy):**
+```bash
+npm run server                    # Start backend on port 5000
+```
+
+**Frontend:**
+```bash
 npm run dev                       # Start frontend
+```
 
-# Testing
-node test-xlsx-upload.js         # Run automated tests
-SERVER_URL=http://localhost:3002 node test-xlsx-upload.js  # Custom port
+**Testing:**
+```bash
+node test-xlsx-upload.js         # Tests Python backend (port 8000) by default
+SERVER_URL=http://localhost:5000 node test-xlsx-upload.js  # Test JS backend
 ```
 
 ### Important Files

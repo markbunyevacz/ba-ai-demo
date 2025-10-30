@@ -5,6 +5,10 @@
 You now have a fully implemented real Jira OAuth 2.0 integration!
 Follow these steps to get it running.
 
+> **📌 Backend Choice**: This guide covers **JavaScript backend** setup.  
+> For **Python FastAPI backend** setup, see **[START_HERE_PYTHON_BACKEND.md](./START_HERE_PYTHON_BACKEND.md)**  
+> Both backends support Jira OAuth integration.
+
 ## 📋 Step 1: Atlassian OAuth Registration (5 minutes)
 
 ### 1.1 Go to Atlassian Developer Portal
@@ -74,13 +78,37 @@ This installs all dependencies including new Jira OAuth packages.
 
 ## 🚀 Step 4: Start the Application (1 minute)
 
+### Option A: JavaScript Backend (This Guide)
+
 \\\ash
 npm start
 \\\
 
 Two servers will start:
-- Backend: http://localhost:3001
+- Backend: http://localhost:3001 (or 5000, depending on PORT env var)
 - Frontend: http://localhost:5173
+
+### Option B: Python Backend (Recommended)
+
+**Terminal 1 - Python Backend:**
+\\\ash
+cd python-backend
+python -m venv venv
+source venv/bin/activate  # Windows: .\venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+\\\
+
+**Terminal 2 - Frontend:**
+\\\ash
+npm run dev
+\\\
+
+Servers will be:
+- Backend: http://localhost:8000
+- Frontend: http://localhost:5173
+
+**Note**: For Python backend, update JIRA_CALLBACK_URL in `.env` to `http://localhost:8000/api/jira/callback`
 
 ## 🧪 Step 5: Test OAuth Flow (2 minutes)
 
@@ -200,9 +228,17 @@ Read these files for more details:
 - \QUICKSTART_JIRA.md\ - Quick start guide
 
 ### Modified Files
+
+**JavaScript Backend:**
 - \package.json\ - Added 5 new dependencies
 - \server.js\ - Added OAuth routes (150+ lines)
 - \src/App.jsx\ - Added OAuth flow (200+ lines)
+
+**Python Backend:**
+- \python-backend/requirements.txt\ - Dependencies for Jira OAuth
+- \python-backend/api/routes/jira.py\ - OAuth routes
+- \python-backend/services/jira_service.py\ - Jira OAuth service
+- \src/App.jsx\ - OAuth flow (works with both backends)
 - \README.md\ - Updated with Jira features
 
 ### Dependencies Added

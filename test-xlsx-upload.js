@@ -17,7 +17,8 @@ import { fileURLToPath } from 'url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // Configuration
-const SERVER_URL = process.env.SERVER_URL || 'http://localhost:5000'
+// Default to Python backend (port 8000), fallback to JavaScript backend (port 5000)
+const SERVER_URL = process.env.SERVER_URL || 'http://localhost:8000'
 const TEST_FILES_DIR = path.join(__dirname, 'docs')
 
 // Color codes for console output
@@ -64,7 +65,8 @@ async function testServerConnectivity() {
   } catch (error) {
     log.error(`Server connection failed: ${error.message}`)
     log.warn(`Make sure the backend is running on ${SERVER_URL}`)
-    log.warn(`Run: npm run server or PORT=5000 npm run server`)
+    log.warn(`Python backend: cd python-backend && uvicorn main:app --reload --port 8000`)
+    log.warn(`JavaScript backend (legacy): npm run server`)
     return false
   }
 }

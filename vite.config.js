@@ -7,7 +7,8 @@ dotenv.config()
 
 const devServerPort = Number(process.env.VITE_DEV_SERVER_PORT) || 3000
 const backendHost = process.env.BACKEND_HOST || 'localhost'
-const backendPort = Number(process.env.PORT || process.env.BACKEND_PORT || 5000)
+// Default to Python backend (port 8000), fallback to JavaScript backend (port 5000) for legacy support
+const backendPort = Number(process.env.PORT || process.env.BACKEND_PORT || 8000)
 
 const apiBasePath = (process.env.VITE_API_URL || '/api').replace(/\/$/, '')
 const authBasePath = (process.env.VITE_AUTH_URL || '/auth').replace(/\/$/, '')
