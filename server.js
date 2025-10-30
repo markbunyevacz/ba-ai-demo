@@ -65,6 +65,91 @@ const groundingService = new GroundingService()
 // Initialize monitoring service
 const monitoringService = new MonitoringService()
 
+// ========================================
+// LangGraph Agent System
+// ========================================
+let agentHealthy = false
+let baWorkflow = null
+let baseAgent = null
+let ticketAgent = null
+
+/**
+ * Initialize LangGraph agent system
+ * Loads agents and workflows if LANGGRAPH_ENABLED=true and ANTHROPIC_API_KEY is set
+ */
+async function initializeAgentSystem() {
+  const langGraphEnabled = process.env.LANGGRAPH_ENABLED === 'true'
+  
+  if (!langGraphEnabled) {
+    console.log('[Config] LangGraph disabled, using rule-based mode only')
+    return
+  }
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.warn('[Config] ANTHROPIC_API_KEY missing, falling back to rule-based mode')
+    return
+  }
+
+  try {
+    console.log('[Config] Initializing LangGraph agent system...')
+    
+    // Import agent classes dynamically
+    const { default: BaseAgent } = await import('./src/agents/BaseAgent.js')
+    const { default: TicketAgent } = await import('./src/agents/TicketAgent.js')
+    const { default: BAWorkflow } = await import('./src/workflows/BAWorkflow.js')
+    
+    // Initialize BaseAgent
+    baseAgent = new BaseAgent({
+      apiKey: process.env.ANTHROPIC_API_KEY,
+      model: process.env.ANTHROPIC_MODEL,
+      maxTokens: process.env.ANTHROPIC_MAX_TOKENS,
+      temperature: process.env.ANTHROPIC_TEMPERATURE,
+      monitoringService
+    })
+
+    // Initialize TicketAgent
+    ticketAgent = new TicketAgent({
+      apiKey: process.env.ANTHROPIC_API_KEY,
+      model: process.env.ANTHROPIC_MODEL,
+      groundingService,
+      complianceService,
+      monitoringService
+    })
+
+    // Initialize BAWorkflow
+    baWorkflow = new BAWorkflow({
+      ticketAgent,
+      groundingService,
+      complianceService,
+      monitoringService
+    })
+
+    // Health check
+    const healthResult = await baseAgent.healthCheck()
+    agentHealthy = healthResult.success
+
+    console.log(`[Config] Agent system initialized: healthy=${agentHealthy}, model=${baseAgent.model}`)
+    
+    // Periodic health check (every 5 minutes)
+    const checkInterval = parseInt(process.env.LANGGRAPH_HEALTH_CHECK_INTERVAL_MS) || 300000
+    setInterval(async () => {
+      try {
+        const health = await baseAgent.healthCheck()
+        agentHealthy = health.success
+        console.log(`[Agent] Health check: ${agentHealthy ? 'OK' : 'FAILED'}`)
+      } catch (error) {
+        agentHealthy = false
+        console.error('[Agent] Health check failed:', error.message)
+      }
+    }, checkInterval)
+
+  } catch (error) {
+    console.error('[Config] Failed to initialize agent system:', error.message)
+    console.warn('[Config] Falling back to rule-based mode')
+    agentHealthy = false
+  }
+}
+
 // Add session management for OAuth state tracking
 const oauthStates = new Map()
 
@@ -90,8 +175,79 @@ const validateOAuthState = (state) => {
   return true
 }
 
+/**
+ * Process tickets using rule-based logic (fallback/original method)
+ * @param {Array} rows - Excel rows (array of arrays)
+ * @param {Object} columnIndices - Column index mapping
+ * @returns {Array} Processed tickets
+ */
+function processTicketsRuleBased(rows, columnIndices) {
+  const dataRows = rows.slice(1)
+  const tickets = dataRows
+    .map((row, index) => {
+      const safeRow = Array.isArray(row) ? row : []
+
+      const ticket = {
+        id: `MVM-${ticketCounter + index}`,
+        summary: 'Untitled',
+        description: '',
+        priority: 'Medium',
+        assignee: 'Unassigned',
+        epic: 'No Epic',
+        acceptanceCriteria: [],
+        createdAt: new Date().toISOString()
+      }
+
+      // Populate fields from Excel
+      if (columnIndices['User Story'] !== undefined) {
+        ticket.summary = String(safeRow[columnIndices['User Story']] ?? 'Untitled').trim()
+      }
+
+      if (columnIndices['Priority'] !== undefined) {
+        const rawPriority = String(safeRow[columnIndices['Priority']] ?? 'Medium').trim()
+        ticket.priority = priorityMap[rawPriority] || rawPriority || 'Medium'
+      }
+
+      if (columnIndices['Assignee'] !== undefined) {
+        ticket.assignee = String(safeRow[columnIndices['Assignee']] ?? 'Unassigned').trim()
+      }
+
+      if (columnIndices['Epic'] !== undefined) {
+        ticket.epic = String(safeRow[columnIndices['Epic']] ?? 'No Epic').trim()
+      }
+
+      if (columnIndices['Acceptance Criteria'] !== undefined) {
+        const rawCriteria = safeRow[columnIndices['Acceptance Criteria']]
+        if (rawCriteria) {
+          const criteriaText = String(rawCriteria).trim()
+          ticket.acceptanceCriteria = criteriaText.split(/[;\n]/).map(c => c.trim()).filter(c => c)
+        }
+      }
+
+      // Enhanced description
+      ticket.description = `User Story: ${ticket.summary}\n\nPriority: ${ticket.priority}\nAssignee: ${ticket.assignee}\nEpic: ${ticket.epic}`
+
+      // Apply grounding validation
+      const sourceData = { rowIndex: index, originalRow: safeRow }
+      const groundedTicket = groundingService.enhanceWithGrounding(ticket, sourceData)
+      
+      console.log(`Grounding validation for ${ticket.id}:`, {
+        isValid: groundedTicket._grounding.validated,
+        confidence: groundedTicket._grounding.confidence,
+        issues: groundedTicket._grounding.issues.length,
+        warnings: groundedTicket._grounding.warnings.length
+      })
+
+      return groundedTicket
+    })
+    .filter(ticket => ticket.summary.trim() !== '' && ticket.summary !== 'Untitled')
+
+  ticketCounter += tickets.length
+  return tickets
+}
+
 // Routes
-app.post('/api/upload', upload.single('file'), (req, res) => {
+app.post('/api/upload', upload.single('file'), async (req, res) => {
   // Track request start
   const sessionId = monitoringService.trackRequest({
     endpoint: '/api/upload',
@@ -165,10 +321,60 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
     }
     console.log('✅ User Story column FOUND at index:', columnIndices['User Story'])
 
-    // Convert data rows (AoA) to tickets without using header-keyed objects
-    console.log('Starting ticket generation...')
-    const dataRows = rows.slice(1)
-    const tickets = dataRows
+    // ========================================
+    // LangGraph Agent or Rule-based Processing
+    // ========================================
+    let tickets = []
+    let usedAgent = false
+    let fallbackTriggered = false
+    
+    const langGraphEnabled = process.env.LANGGRAPH_ENABLED === 'true'
+    const fallbackMode = process.env.LANGGRAPH_FALLBACK_MODE || 'auto'
+    
+    // Try agent-based processing
+    if (langGraphEnabled && agentHealthy && fallbackMode !== 'always_rule_based') {
+      try {
+        console.log('[Agent] Starting BAWorkflow for session:', sessionId)
+        
+        // Execute BAWorkflow
+        const workflowResult = await baWorkflow.execute({
+          rows,
+          fileName: req.file.originalname,
+          sessionId
+        })
+        
+        tickets = workflowResult.tickets
+        usedAgent = true
+        
+        console.log(`[Agent] Successfully processed ${tickets.length} tickets`)
+        
+      } catch (agentError) {
+        console.error('[Agent] Workflow error:', agentError.message)
+        console.warn('[Agent] Fallback triggered due to error')
+        
+        fallbackTriggered = true
+        
+        // Fallback to rule-based processing
+        tickets = processTicketsRuleBased(rows, columnIndices)
+      }
+    } else {
+      // Rule-based processing (original logic)
+      const reason = !langGraphEnabled ? 'disabled' : 
+                     !agentHealthy ? 'unhealthy' :
+                     'always_rule_based mode'
+      console.log(`[Rule-based] Processing with traditional logic (reason: ${reason})`)
+      tickets = processTicketsRuleBased(rows, columnIndices)
+    }
+
+    // If we still have empty tickets (shouldn't happen with proper fallback), log warning
+    if (tickets.length === 0) {
+      console.warn('[Warning] No tickets generated from', rows.length - 1, 'data rows')
+    }
+
+    // Skip the old inline logic since processTicketsRuleBased handles it now
+    if (false) {
+      const dataRows = rows.slice(1)
+      const oldTickets = dataRows
       .map((row, index) => {
         const safeRow = Array.isArray(row) ? row : []
 
@@ -232,9 +438,7 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
         return groundedTicket
       })
       .filter(ticket => ticket.summary.trim() !== '')
-
-    // Update counter for next upload
-    ticketCounter += tickets.length
+    }
 
     // Calculate average confidence for monitoring
     const averageConfidence = tickets.length > 0 ? 
@@ -245,11 +449,22 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
       success: true,
       ticketsGenerated: tickets.length,
       averageConfidence,
-      processingTime: Date.now() - monitoringService.sessionData.find(s => s.id === sessionId).startTime
+      agentUsed: usedAgent,
+      fallbackTriggered: fallbackTriggered,
+      processingTime: Date.now() - monitoringService.sessionData.find(s => s.id === sessionId)?.startTime
     })
 
-    console.log('Generated tickets:', tickets)
-    res.json({ tickets })
+    console.log('Generated tickets:', tickets.length)
+    res.json({ 
+      tickets,
+      _metadata: {
+        processedBy: usedAgent ? 'langgraph-agent' : 'rule-based',
+        fallback: fallbackTriggered,
+        agentHealthy,
+        langGraphEnabled,
+        averageConfidence
+      }
+    })
 
   } catch (error) {
     console.error('Error processing file:', error)
@@ -548,6 +763,145 @@ app.get('/api/health', (req, res) => {
     uptime: process.uptime(),
     version: '1.0.0'
   })
+})
+
+// ========================================
+// Agent System Endpoints
+// ========================================
+
+// Agent status endpoint
+app.get('/api/agent/status', async (req, res) => {
+  try {
+    const status = {
+      enabled: process.env.LANGGRAPH_ENABLED === 'true',
+      healthy: agentHealthy,
+      model: process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022',
+      fallbackMode: process.env.LANGGRAPH_FALLBACK_MODE || 'auto',
+      timestamp: new Date().toISOString()
+    }
+
+    if (baseAgent && agentHealthy) {
+      const stats = baseAgent.getStats()
+      status.stats = stats
+    }
+
+    res.json(status)
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to get agent status',
+      details: error.message
+    })
+  }
+})
+
+// Explicit agent-based processing endpoint
+app.post('/api/upload/agent', upload.single('file'), async (req, res) => {
+  const sessionId = monitoringService.trackRequest({
+    endpoint: '/api/upload/agent',
+    fileSize: req.file?.size || 0,
+    fileName: req.file?.originalname || 'unknown'
+  })
+
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' })
+    }
+
+    if (!agentHealthy) {
+      return res.status(503).json({
+        error: 'Agent system unavailable',
+        details: 'The AI agent system is not healthy. Use /api/upload for automatic fallback.'
+      })
+    }
+
+    // Parse Excel
+    const workbook = xlsx.read(req.file.buffer, { type: 'buffer' })
+    const rows = xlsx.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 })
+
+    // Execute BAWorkflow (no fallback)
+    const result = await baWorkflow.execute({
+      rows,
+      fileName: req.file.originalname,
+      sessionId
+    })
+
+    monitoringService.trackCompletion(sessionId, {
+      success: true,
+      ticketsGenerated: result.tickets.length,
+      agentUsed: true
+    })
+
+    res.json({
+      tickets: result.tickets,
+      _metadata: {
+        processedBy: 'langgraph-agent',
+        workflowMetadata: result.metadata
+      }
+    })
+  } catch (error) {
+    console.error('[Agent] Explicit agent processing failed:', error.message)
+    monitoringService.trackCompletion(sessionId, { success: false, error: error.message })
+    res.status(500).json({
+      error: 'Agent processing failed',
+      details: error.message
+    })
+  }
+})
+
+// Explicit rule-based processing endpoint
+app.post('/api/upload/rule-based', upload.single('file'), (req, res) => {
+  const sessionId = monitoringService.trackRequest({
+    endpoint: '/api/upload/rule-based',
+    fileSize: req.file?.size || 0,
+    fileName: req.file?.originalname || 'unknown'
+  })
+
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' })
+    }
+
+    // Parse Excel
+    const workbook = xlsx.read(req.file.buffer, { type: 'buffer' })
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]]
+    const rows = xlsx.utils.sheet_to_json(worksheet, { header: 1 })
+
+    // Column mapping
+    const headers = rows[0].map(h => String(h ?? '').trim())
+    const columnIndices = {}
+    headers.forEach((header, index) => {
+      const normalized = header.toLowerCase().trim()
+      if (normalized.includes('story')) columnIndices['User Story'] = index
+      if (normalized.includes('priority') || normalized.includes('prioritás')) columnIndices['Priority'] = index
+      if (normalized.includes('assignee')) columnIndices['Assignee'] = index
+      if (normalized.includes('epic')) columnIndices['Epic'] = index
+      if (normalized.includes('acceptance') || normalized.includes('criteria')) columnIndices['Acceptance Criteria'] = index
+    })
+
+    // Process with rule-based logic
+    const tickets = processTicketsRuleBased(rows, columnIndices)
+
+    monitoringService.trackCompletion(sessionId, {
+      success: true,
+      ticketsGenerated: tickets.length,
+      agentUsed: false
+    })
+
+    res.json({
+      tickets,
+      _metadata: {
+        processedBy: 'rule-based',
+        explicitMode: true
+      }
+    })
+  } catch (error) {
+    console.error('[Rule-based] Explicit rule-based processing failed:', error.message)
+    monitoringService.trackCompletion(sessionId, { success: false, error: error.message })
+    res.status(500).json({
+      error: 'Rule-based processing failed',
+      details: error.message
+    })
+  }
 })
 
 // Grounding statistics endpoint
@@ -1123,12 +1477,19 @@ app.use((req, res) => {
   })
 })
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Excel to Jira Ticket Converter server running on port ${PORT}`)
-  console.log(`📊 Health check: http://localhost:${PORT}/api/health`)
-  console.log(`📤 Upload endpoint: http://localhost:${PORT}/api/upload`)
-  console.log(`🏠 Root endpoint: http://localhost:${PORT}/`)
-  console.log(`📋 Expected columns: User Story, Priority, Assignee, Epic, Acceptance Criteria`)
-  console.log(`🔄 Memory storage enabled - no file cleanup needed`)
+// Start server with agent system initialization
+initializeAgentSystem().then(() => {
+  app.listen(PORT, () => {
+    console.log(`🚀 Excel to Jira Ticket Converter server running on port ${PORT}`)
+    console.log(`📊 Health check: http://localhost:${PORT}/api/health`)
+    console.log(`📤 Upload endpoint: http://localhost:${PORT}/api/upload`)
+    console.log(`🏠 Root endpoint: http://localhost:${PORT}/`)
+    console.log(`📋 Expected columns: User Story, Priority, Assignee, Epic, Acceptance Criteria`)
+    console.log(`🔄 Memory storage enabled - no file cleanup needed`)
+    console.log(`🤖 Agent mode: ${agentHealthy ? 'ENABLED' : 'DISABLED (rule-based fallback)'}`)
+    console.log(`📝 Fallback mode: ${process.env.LANGGRAPH_FALLBACK_MODE || 'auto'}`)
+  })
+}).catch(error => {
+  console.error('[Startup] Failed to start server:', error)
+  process.exit(1)
 })
