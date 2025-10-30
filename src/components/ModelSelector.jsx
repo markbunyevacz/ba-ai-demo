@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import PropTypes from 'prop-types'
+import apiClient from '../services/apiClient'
 
 /**
  * ModelSelector Component
@@ -21,37 +22,38 @@ function ModelSelector({ onModelChange, disabled }) {
   const fetchModels = async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/ai/models')
-      if (!response.ok) {
-        throw new Error('Failed to fetch models')
-      }
-      const data = await response.json()
-      
-      setModels(data.models)
-      setProviders(data.providers)
-      
-      // Set default provider and model
-      const defaultProv = data.defaultProvider || 'openai'
+      const data = await apiClient.get('/ai/models')
+      const providerMap = data?.providers || {}
+      const modelMap = data?.models || {}
+
+      setProviders(providerMap)
+      setModels(modelMap)
+
+      const providerKeys = Object.keys(providerMap)
+      const defaultProv = providerKeys.includes(data?.defaultProvider)
+        ? data.defaultProvider
+        : providerKeys[0] || 'openai'
+
       setSelectedProvider(defaultProv)
-      
-      // Set first recommended or first available model
-      const availableModels = data.models[defaultProv] || []
-      const recommendedModel = availableModels.find(m => m.recommended)
-      const firstModel = availableModels[0]
-      const defaultModel = recommendedModel || firstModel
-      
+
+      const availableModels = modelMap[defaultProv] || []
+      const recommendedModel = availableModels.find((m) => m.recommended)
+      const defaultModel = recommendedModel || availableModels[0]
+
       if (defaultModel) {
         setSelectedModel(defaultModel.id)
         onModelChange({
           provider: defaultProv,
-          model: defaultModel.id
+          model: defaultModel.id,
         })
+      } else {
+        setSelectedModel('')
       }
-      
+
       setLoading(false)
     } catch (err) {
       console.error('Error fetching models:', err)
-      setError(err.message)
+      setError(err.message || 'Failed to fetch models')
       setLoading(false)
     }
   }
@@ -59,19 +61,20 @@ function ModelSelector({ onModelChange, disabled }) {
   const handleProviderChange = (e) => {
     const newProvider = e.target.value
     setSelectedProvider(newProvider)
-    
-    // Reset model selection
+
     const availableModels = models[newProvider] || []
-    const recommendedModel = availableModels.find(m => m.recommended)
-    const firstModel = availableModels[0]
-    const defaultModel = recommendedModel || firstModel
-    
+    const recommendedModel = availableModels.find((m) => m.recommended)
+    const defaultModel = recommendedModel || availableModels[0]
+
     if (defaultModel) {
       setSelectedModel(defaultModel.id)
       onModelChange({
         provider: newProvider,
-        model: defaultModel.id
+        model: defaultModel.id,
       })
+    } else {
+      setSelectedModel('')
+      onModelChange({ provider: newProvider, model: '' })
     }
   }
 
@@ -80,7 +83,7 @@ function ModelSelector({ onModelChange, disabled }) {
     setSelectedModel(newModel)
     onModelChange({
       provider: selectedProvider,
-      model: newModel
+      model: newModel,
     })
   }
 
@@ -103,9 +106,10 @@ function ModelSelector({ onModelChange, disabled }) {
     )
   }
 
+  const providerKeys = Object.keys(providers)
   const availableModels = models[selectedProvider] || []
-  const currentModel = availableModels.find(m => m.id === selectedModel)
-  const providerConfigured = providers[selectedProvider]?.configured
+  const currentModel = availableModels.find((m) => m.id === selectedModel)
+  const providerConfigured = providers[selectedProvider]?.configured !== false
 
   return (
     <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 space-y-4">
@@ -116,16 +120,20 @@ function ModelSelector({ onModelChange, disabled }) {
         <select
           value={selectedProvider}
           onChange={handleProviderChange}
-          disabled={disabled}
+          disabled={disabled || providerKeys.length === 0}
           className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
         >
-          <option value="openai">OpenAI (Direct)</option>
-          <option value="openrouter">OpenRouter (100+ Models)</option>
+          {providerKeys.length === 0 && <option value="">No providers configured</option>}
+          {providerKeys.map((providerKey) => (
+            <option key={providerKey} value={providerKey}>
+              {providers[providerKey]?.name || providerKey}
+            </option>
+          ))}
         </select>
-        
+
         {!providerConfigured && (
           <p className="mt-1 text-xs text-amber-600">
-            ⚠️ {selectedProvider === 'openai' ? 'OPENAI_API_KEY' : 'OPENROUTER_API_KEY'} nincs konfigurálva
+            ⚠️ {providers[selectedProvider]?.name || selectedProvider} nincs konfigurálva
           </p>
         )}
       </div>
@@ -137,19 +145,20 @@ function ModelSelector({ onModelChange, disabled }) {
         <select
           value={selectedModel}
           onChange={handleModelChange}
-          disabled={disabled || !providerConfigured}
+          disabled={disabled || !providerConfigured || availableModels.length === 0}
           className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
         >
+          {availableModels.length === 0 && <option value="">Nincs elérhető modell</option>}
           {availableModels.map((model) => (
             <option key={model.id} value={model.id}>
-              {model.name} 
+              {model.name}
               {model.recommended && ' ⭐'}
               {model.budget && ' 💰'}
               {model.premium && ' 👑'}
             </option>
           ))}
         </select>
-        
+
         {currentModel && (
           <div className="mt-2 p-3 bg-gray-50 rounded-md space-y-1">
             <div className="grid grid-cols-2 gap-2 text-xs">
@@ -170,7 +179,7 @@ function ModelSelector({ onModelChange, disabled }) {
                 <span className="ml-1 font-medium">{currentModel.quality}</span>
               </div>
             </div>
-            
+
             {currentModel.budget && (
               <p className="text-xs text-green-700 mt-2">
                 💰 Költséghatékony választás
@@ -189,10 +198,10 @@ function ModelSelector({ onModelChange, disabled }) {
           </div>
         )}
       </div>
-      
+
       {selectedProvider === 'openrouter' && (
         <div className="text-xs text-gray-600 bg-blue-50 p-3 rounded-md">
-          ℹ️ OpenRouter akár 100+ különböző modellt támogat (GPT-4, Claude, Llama, Gemini stb.). 
+          ℹ️ OpenRouter akár 100+ különböző modellt támogat (GPT-4, Claude, Llama, Gemini stb.).
           API kulcsot itt kérhetsz: <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">openrouter.ai/keys</a>
         </div>
       )}
@@ -202,11 +211,11 @@ function ModelSelector({ onModelChange, disabled }) {
 
 ModelSelector.propTypes = {
   onModelChange: PropTypes.func.isRequired,
-  disabled: PropTypes.bool
+  disabled: PropTypes.bool,
 }
 
 ModelSelector.defaultProps = {
-  disabled: false
+  disabled: false,
 }
 
 export default ModelSelector

@@ -17,6 +17,7 @@ import diagramClient from './services/diagramClient'
 import MoSCoWDashboard from './components/MoSCoWDashboard'
 import prioritizationService from './services/prioritizationService'
 import ComplianceReportPanel from './components/ComplianceReportPanel'
+import apiClient from './services/apiClient'
 
 function App() {
   const [uploadedFile, setUploadedFile] = useState(null)
@@ -87,9 +88,10 @@ function App() {
   // Check Jira authentication status
   const checkJiraStatus = async (sessionId) => {
     try {
-      const response = await fetch(`/api/jira/status?sessionId=${sessionId}`)
-      const data = await response.json()
-      
+      const data = await apiClient.get('/jira/status', {
+        params: { sessionId },
+      })
+
       if (data.authenticated) {
         setJiraSessionId(sessionId)
         setJiraAuthenticated(true)
@@ -107,18 +109,14 @@ function App() {
 
   // Handle Jira login
   const handleJiraLogin = () => {
-    window.location.href = '/auth/jira'
+    window.location.href = `${apiClient.AUTH_BASE_URL}/jira`
   }
 
   // Handle Jira logout
   const handleJiraLogout = async () => {
     try {
       if (jiraSessionId) {
-        await fetch('/api/jira/logout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: jiraSessionId })
-        })
+        await apiClient.post('/jira/logout', { sessionId: jiraSessionId })
       }
       
       setJiraSessionId(null)
@@ -173,81 +171,17 @@ function App() {
     setFinalSuccessMessage('')
 
     try {
-      const formData = new FormData()
-      formData.append('file', uploadedFile)
-      
-      // Add AI model selection to form data
-      formData.append('aiProvider', selectedAIModel.provider)
-      formData.append('aiModel', selectedAIModel.model)
+      const data = await apiClient.uploadFile(uploadedFile, '/upload/document', {
+        fields: {
+          aiProvider: selectedAIModel.provider,
+          aiModel: selectedAIModel.model,
+        },
+      })
 
-      // Use the new /api/upload/document endpoint that supports both Excel and Word
-      let response
-      try {
-        response = await fetch('/api/upload/document', {
-          method: 'POST',
-          body: formData
-        })
-      } catch (fetchError) {
-        // Network error - server not running or connection refused
-        console.error('Network error:', fetchError)
-        throw new Error(
-          `A szerver nem érhető el. Kérjük, ellenőrizze, hogy a backend fut-e. Hiba: ${fetchError.message}`
-        )
+      if (!data || !Array.isArray(data.tickets)) {
+        throw new Error('Érvénytelen válasz szerkezet: hiányzó vagy érvénytelen ticketlista')
       }
 
-      // Check if response is valid
-      if (!response) {
-        throw new Error('Nincs válasz a szervertől')
-      }
-
-      // Check content-type to ensure we have JSON
-      const contentType = response.headers.get('content-type')
-      let data
-      
-      if (!contentType || !contentType.includes('application/json')) {
-        // Not JSON response - might be HTML error page or no content
-        const text = await response.text()
-        
-        if (!text || text.trim() === '') {
-          throw new Error(
-            `Üres válasz a szervertől (${response.status}). A szerver nem fut vagy hibát adott vissza.`
-          )
-        }
-        
-        // Try to parse as JSON anyway
-        try {
-          data = JSON.parse(text)
-        } catch (parseError) {
-          console.error('Response text:', text.substring(0, 500))
-          throw new Error(
-            `Érvénytelen válasz a szervertől: ${text.substring(0, 200)}`
-          )
-        }
-      } else {
-        // Parse JSON response
-        try {
-          data = await response.json()
-        } catch (parseError) {
-          console.error('JSON parse error:', parseError)
-          throw new Error(
-            `Nem sikerült feldolgozni a szerver válaszát: ${parseError.message}`
-          )
-        }
-      }
-
-      if (!response.ok) {
-        throw new Error(data.error || data.message || `Szerver hiba: ${response.status}`)
-      }
-
-      // Validate that we have the expected data
-      if (!data.tickets || !Array.isArray(data.tickets)) {
-        console.error('Invalid response structure:', data)
-        throw new Error(
-          'Érvénytelen válasz szerkezet: hiányzó vagy érvénytelen ticketlista'
-        )
-      }
-
-      // Wait for ProgressBar animation to complete (3 seconds)
       setTimeout(() => {
         const prioritizedTickets = prioritizationService.classifyTickets(data.tickets)
         setTickets(prioritizedTickets)
@@ -350,66 +284,45 @@ function App() {
         throw new Error('Nem található Jira session. Kérjük, csatlakozz újra a Jira-hoz.')
       }
 
-      // Call real Jira API
       const requestBody = {
-        tickets: tickets,
-        sessionId: jiraSessionId
+        tickets,
+        sessionId: jiraSessionId,
       }
 
       const sendRequest = async (attempt = 1) => {
-        const response = await fetch('/api/jira/create-tickets', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(requestBody)
-        })
-
-        if (!response.ok) {
-          const data = await response.json().catch(() => ({}))
-
-          if (response.status === 429 && attempt < 3) {
+        try {
+          return await apiClient.post('/jira/create-tickets', requestBody)
+        } catch (error) {
+          if (error.status === 429 && attempt < 3) {
             const delay = 1000 * Math.pow(2, attempt - 1)
             console.warn(`Retrying Jira ticket creation after ${delay}ms (attempt ${attempt + 1}/3) due to rate limit`)
-            await new Promise(resolve => setTimeout(resolve, delay))
+            await new Promise((resolve) => setTimeout(resolve, delay))
             return sendRequest(attempt + 1)
           }
-
-          return { response, data }
+          throw error
         }
-
-        const data = await response.json()
-        return { response, data }
       }
 
-      const { response, data } = await sendRequest()
+      const data = await sendRequest()
 
-      if (!response.ok) {
-        // If unauthorized, clear session and redirect to login
-        if (response.status === 401) {
-          setJiraAuthenticated(false)
-          localStorage.removeItem('jiraSessionId')
-          setJiraSessionId(null)
-          throw new Error(data.details || 'Jira session lejárt. Kérjük, csatlakozz újra.')
-        }
-        throw new Error(data.details || data.error || 'Nem sikerült a ticketek létrehozása')
-      }
-
-      // Success!
       const successMessage = `✅ Sikeresen létrehozva ${data.result.successful}/${data.result.total} ticket`
       setFinalSuccessMessage(successMessage)
       setJiraSentTickets(tickets)
-      
-      // Show results
+
       if (data.result.errors && data.result.errors.length > 0) {
         console.warn('Some tickets failed:', data.result.errors)
       }
-
     } catch (error) {
       console.error('Jira küldés hiba:', error)
-      setJiraError(`Jira küldés hiba: ${error.message}`)
-        setError(`Jira küldés hiba: ${error.message}`)
-        setTimeout(() => setError(''), 8000)
+      if (error.status === 401) {
+        setJiraAuthenticated(false)
+        localStorage.removeItem('jiraSessionId')
+        setJiraSessionId(null)
+      }
+      const detail = error.body?.details || error.body?.error || error.message
+      setJiraError(`Jira küldés hiba: ${detail}`)
+      setError(`Jira küldés hiba: ${detail}`)
+      setTimeout(() => setError(''), 8000)
     } finally {
       setIsJiraSending(false)
     }

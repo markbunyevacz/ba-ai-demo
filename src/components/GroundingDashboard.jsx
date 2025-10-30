@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import CompliancePanel from './CompliancePanel.jsx'
+import apiClient from '../services/apiClient'
 
 const GroundingDashboard = ({ tickets = [] }) => {
   const [groundingStats, setGroundingStats] = useState(null)
@@ -12,16 +13,10 @@ const GroundingDashboard = ({ tickets = [] }) => {
 
   const fetchGroundingStats = async () => {
     try {
-      const response = await fetch('/api/grounding/stats')
-      const data = await response.json()
-      
-      if (response.ok) {
-        setGroundingStats(data.grounding)
-      } else {
-        setError(data.error || 'Failed to fetch grounding stats')
-      }
+      const data = await apiClient.get('/grounding/stats')
+      setGroundingStats(data?.grounding || data)
     } catch (err) {
-      setError('Network error while fetching grounding stats')
+      setError(err?.message || 'Failed to fetch grounding stats')
     } finally {
       setLoading(false)
     }
