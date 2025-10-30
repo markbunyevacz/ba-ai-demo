@@ -373,7 +373,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 
     // Skip the old inline logic since processTicketsRuleBased handles it now
     if (false) {
-      const dataRows = rows.slice(1)
+    const dataRows = rows.slice(1)
       const oldTickets = dataRows
       .map((row, index) => {
         const safeRow = Array.isArray(row) ? row : []
@@ -1479,13 +1479,13 @@ app.use((req, res) => {
 
 // Start server with agent system initialization
 initializeAgentSystem().then(() => {
-  app.listen(PORT, () => {
-    console.log(`🚀 Excel to Jira Ticket Converter server running on port ${PORT}`)
-    console.log(`📊 Health check: http://localhost:${PORT}/api/health`)
-    console.log(`📤 Upload endpoint: http://localhost:${PORT}/api/upload`)
-    console.log(`🏠 Root endpoint: http://localhost:${PORT}/`)
-    console.log(`📋 Expected columns: User Story, Priority, Assignee, Epic, Acceptance Criteria`)
-    console.log(`🔄 Memory storage enabled - no file cleanup needed`)
+app.listen(PORT, () => {
+  console.log(`🚀 Excel to Jira Ticket Converter server running on port ${PORT}`)
+  console.log(`📊 Health check: http://localhost:${PORT}/api/health`)
+  console.log(`📤 Upload endpoint: http://localhost:${PORT}/api/upload`)
+  console.log(`🏠 Root endpoint: http://localhost:${PORT}/`)
+  console.log(`📋 Expected columns: User Story, Priority, Assignee, Epic, Acceptance Criteria`)
+  console.log(`🔄 Memory storage enabled - no file cleanup needed`)
     console.log(`🤖 Agent mode: ${agentHealthy ? 'ENABLED' : 'DISABLED (rule-based fallback)'}`)
     console.log(`📝 Fallback mode: ${process.env.LANGGRAPH_FALLBACK_MODE || 'auto'}`)
   })
